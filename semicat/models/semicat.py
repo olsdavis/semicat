@@ -98,3 +98,18 @@ class SemicatModule(L.LightningModule):
     def test_step(self, batch: Tensor) -> None:
         loss = self.model_step(batch)
         self.test_loss(loss)
+
+    def configure_optimizers(self):
+        optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())
+        if self.hparams.scheduler is not None:
+            scheduler = self.hparams.scheduler(optimizer=optimizer)
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                    "scheduler": scheduler,
+                    "monitor": "val/loss",
+                    "interval": "epoch",
+                    "frequency": 1,
+                },
+            }
+        return {"optimizer": optimizer}

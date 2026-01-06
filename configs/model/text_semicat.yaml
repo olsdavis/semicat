@@ -1,0 +1,6 @@
+_target_: semicat.models.textsemicat.TextSemicatModule
+
+net:
+  _target_: semicat.net.dit.DIT
+
+prior_type: gaussian

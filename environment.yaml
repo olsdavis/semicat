@@ -22,19 +22,16 @@ channels:
 
 dependencies:
   - python=3.10
-  - pytorch=2.*
-  - torchvision=0.*
-  - lightning=2.*
-  - torchmetrics=0.*
-  - hydra-core=1.*
-  - rich=13.*
-  - pre-commit=3.*
-  - pytest=7.*
-
-  - wandb
-
   - pip>=23
   - pip:
+    - torch>=2.5.0
+    - torchmetrics
+    - torchvision
+    - lightning>=2.0.0
+    - hydra-core
     - hydra-optuna-sweeper
+    - rich>=13.0
     - hydra-colorlog
     - rootutils
+    - pre-commit
+    - wandb

@@ -1,5 +1,5 @@
 defaults:
-  - text_semicat
+  - base_text_semicat
 
 net:
   hidden_size: 768

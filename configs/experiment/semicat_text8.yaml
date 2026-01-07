@@ -1,7 +1,8 @@
+# @package _global_
+
 defaults:
   - override /data: text8
-  - override /model: text_semicat
-  - override /callbacks: default
+  - override /model: text8_semicat
   - override /trainer: default
 
 seed: 12345

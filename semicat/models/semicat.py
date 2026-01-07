@@ -27,6 +27,7 @@ class SemicatModule(L.LightningModule):
         scheduler,
     ):
         super().__init__()
+        torch.set_float32_matmul_precision("high")
         self.save_hyperparameters(logger=False, ignore=["net"])
         self.net = net
         self.train_loss = MeanMetric()
@@ -68,8 +69,8 @@ class SemicatModule(L.LightningModule):
         t = torch.rand(x1.size(0), device=x1.device)
         t = t.view(-1, *((1,) * (x1.ndim - 1)))
         xt = (1.0 - t) * x0 + t * x1
-        x1_pred = self.net(xt, t.view(-1))
-        loss = F.cross_entropy(x1_pred, x0)
+        x1_pred: Tensor = self.net(xt, t.view(-1))
+        loss = F.cross_entropy(x1_pred.transpose(-1, 1), x0.argmax(dim=-1))
         return loss
 
     def model_step(

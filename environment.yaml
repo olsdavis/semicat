@@ -20,6 +20,10 @@ channels:
 # users, but allows for different minor and patch versions of packages where backwards
 # compatibility is usually guaranteed
 
+# TODO: fix env. It was really hard to install flash_attn on some devices.
+# It required (python=3.10) torch==2.4.1, torchvision==0.19.1, ninja==1.13.0
+# flash_attn==2.7.4.post1 --no-build-isolation --no-cache (probably tmp on different file sys)
+
 dependencies:
   - python=3.10
   - pip>=23
@@ -35,3 +39,6 @@ dependencies:
     - rootutils
     - pre-commit
     - wandb
+    - einops==0.8.1
+    - ninja==1.13.0
+    - flash_attn==... --no-build-isolation

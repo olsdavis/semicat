@@ -9,3 +9,11 @@ seed: 12345
 trainer:
   min_epochs: 100
   max_epochs: 500
+
+tags: ["semicat", "text8"]
+
+logger:
+  wandb:
+    group: semicat_text8
+    name: semicat-text8-${seed}
+    tags: ["semicat", "text8"]

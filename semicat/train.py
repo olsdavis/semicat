@@ -40,6 +40,9 @@ from semicat.utils import (
 log = RankedLogger(__name__, rank_zero_only=True)
 
 
+OmegaConf.register_new_resolver("slurm_id", lambda: os.environ.get("SLURM_JOB_ID", "local"))
+
+
 @task_wrapper
 def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """Trains the model. Can additionally evaluate on a testset, using best weights obtained during

@@ -4,13 +4,8 @@ defaults:
 net:
   hidden_size: 768
   cond_dim: 128
+  vocab_size: 27
   length: ${data.k}
   n_blocks: 12
   n_heads: 12
   dropout: 0.1
-
-optimizer:
-  _target_: torch.optim.AdamW
-  _partial_: true
-  lr: 1e-4
-  weight_decay: 0.01

@@ -446,7 +446,8 @@ class DIT(nn.Module):
     n_heads: int,
     n_blocks: int,
     dropout: float,
-    causal_attention: bool = False,
+    length: int,  # ignored
+    causal_attention: bool = False,  # ignored
   ):
     super().__init__()
     self.causal = False

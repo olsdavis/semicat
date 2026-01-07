@@ -65,7 +65,7 @@ class SemicatModule(L.LightningModule):
         :return: The loss (cross-entropy).
         """
         assert x0.shape == x1.shape
-        t = torch.rand(x1.shape(0))
+        t = torch.rand(x1.size(0), device=x1.device)
         t = t.view(-1, *((1,) * (x1.ndim - 1)))
         xt = (1.0 - t) * x0 + t * x1
         x1_pred = self.net(xt, t.view(-1))
@@ -89,14 +89,17 @@ class SemicatModule(L.LightningModule):
     def training_step(self, batch: Tensor) -> Tensor:
         loss = self.model_step(batch)
         self.train_loss(loss)
+        self.log("train/loss", self.train_loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch: Tensor) -> None:
         loss = self.model_step(batch)
+        self.log("val/loss", self.val_loss, on_step=True, on_epoch=True, prog_bar=True)
         self.val_loss(loss)
 
     def test_step(self, batch: Tensor) -> None:
         loss = self.model_step(batch)
+        self.log("test/loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=False)
         self.test_loss(loss)
 
     def configure_optimizers(self):

@@ -2,9 +2,13 @@
 Text for semicat.
 """
 
+import numpy as np
+import torch
+
 import wandb
 
 from semicat.models.semicat import SemicatModule
+from semicat.metric.nll import get_gpt
 
 
 class TextSemicatModule(SemicatModule):
@@ -48,6 +52,38 @@ class TextSemicatModule(SemicatModule):
             table.add_data(i, s)
         self.logger.experiment.log({f"{prefix}/samples": table}, step=step)
 
+    def _compute_nll(
+        self,
+        strings: list[str],
+    ) -> float:
+        """
+        Compute the NLL of a list of strings using a pre-trained GPT model.
+        Adds a bit of GPU logic to bring the model to the GPU, and some
+        ugly cache-clearing before and after.
+
+        :param strings: The list of strings to compute the NLL for.
+        :return: The average NLL of the strings.
+        """
+        gpt = get_gpt()
+        if torch.cuda.is_available():
+            # not nice, but might be needed to avoid OOM
+            torch.cuda.empty_cache()
+            gpt = gpt.to(self.device)
+
+        nll = np.nan
+
+        try:
+            nll = gpt(strings)
+        finally:
+            if torch.cuda.is_available():
+                gpt = gpt.to("cpu")
+                torch.cuda.empty_cache()
+
+        return nll
+
     def on_validation_epoch_end(self) -> None:
-        strings = self.sample_strings_batch(batch_size=16, sampling_method=100)
-        self._log_strings(strings, prefix="val", step=self.global_step)
+        super().on_validation_epoch_end()
+        strings = self.sample_strings_batch(batch_size=512, sampling_method=100)
+        self._log_strings(strings[:16], prefix="val", step=self.global_step)
+        nll = self._compute_nll(strings)
+        self.log("val/nll@512", nll, on_step=False, on_epoch=True, prog_bar=True)

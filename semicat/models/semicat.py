@@ -107,7 +107,7 @@ class SemicatModule(L.LightningModule):
         :return: The vector field at `(xt, t)`.
         """
         # for now, the schedule is only linear, so:
-        dr = self.net(xt, t) - xt
+        dr = self.net(xt, t).softmax(dim=-1) - xt
         scale = 1.0 / (1.0 - t + 1e-8)
         return dr * scale
 

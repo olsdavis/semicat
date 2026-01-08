@@ -2,14 +2,17 @@
 Defines the main module for semicat.
 """
 
-from typing import Literal
+from typing import Literal, cast
 
 import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
+from torchdiffeq import odeint
 
 import lightning as L
 from torchmetrics import MeanMetric
+
+from semicat.utils.shape import view_for
 
 
 class SemicatModule(L.LightningModule):
@@ -67,7 +70,7 @@ class SemicatModule(L.LightningModule):
         """
         assert x0.shape == x1.shape
         t = torch.rand(x1.size(0), device=x1.device)
-        t = t.view(-1, *((1,) * (x1.ndim - 1)))
+        t = view_for(t, x1)
         xt = (1.0 - t) * x0 + t * x1
         x1_pred: Tensor = self.net(xt, t.view(-1))
         loss = F.cross_entropy(x1_pred.transpose(-1, 1), x0.argmax(dim=-1))
@@ -86,6 +89,68 @@ class SemicatModule(L.LightningModule):
         # for now, only include the VFM step
         x0 = self.prior(x1.shape, device=x1.device)
         return self.vfm_model_step(x0, x1)
+
+    def vf(
+        self,
+        xt: Tensor,
+        t: Tensor,
+    ) -> Tensor:
+        """
+        Returns the vector field from the model.
+
+        :param xt: Current point.
+        :param t: Current time.
+        :return: The vector field at `(xt, t)`.
+        """
+        # for now, the schedule is only linear, so:
+        dr = self.net(xt, t) - xt
+        scale = 1.0 / (1.0 - t + 1e-8)
+        return dr * scale
+
+    @torch.inference_mode()
+    def sample_batch(
+        self,
+        batch_size: int,
+        shape: tuple[int, ...],
+        x0: Tensor | None = None,
+        sampling_method: int | Literal["dopri5"] = 100,
+        sampling_args: dict | None = None,
+    ) -> Tensor:
+        """
+        Samples a batch of data from the model.
+        
+        :param batch_size: The size of the batch to sample at once.
+        :param shape: The shape of a single data point (excluding batch dimension).
+        :param x0: The starting point. If `None`, starts from a prior sample.
+        :param sampling_method: The sampling method: either an integer for the number
+        of steps, or an ODE solver (available: "dopri5").
+        :param sampling_args: Additional arguments for the sampling method. Required if
+        and only if `sampling_method` is not an integer.
+        :return: A batch of sampled data.
+        """
+        x = x0 or self.prior((batch_size, *shape), device=self.device)
+
+        if isinstance(sampling_method, int):
+            steps = sampling_method
+            assert steps > 0
+            ts = torch.linspace(0.0, 1.0, steps+1, device=self.device)
+            for s, t in zip(ts[:-1], ts[1:]):
+                s_fill = view_for(s.expand((batch_size,)), x)
+                v = self.vf(x, s_fill)
+                x += (t - s) * v
+        elif sampling_method == "dopri5":
+            assert sampling_args is not None and isinstance(sampling_args, dict)
+            x = cast(Tensor, odeint(
+                func=self.vf,
+                y0=x,
+                t=torch.tensor([0.0, 1.0], device=self.device),
+                method="dopri5",
+                **sampling_args,
+            )[-1])
+        else:
+            raise ValueError(f"unimplemented sampling method `{sampling_method}`")
+
+        return x
 
     def training_step(self, batch: Tensor) -> Tensor:
         loss = self.model_step(batch)

@@ -1,6 +1,10 @@
 defaults:
   - base_text_semicat
 
+in_shape:
+  - ${data.k}
+  - ${net.vocab_size}
+
 net:
   hidden_size: 768
   cond_dim: 128

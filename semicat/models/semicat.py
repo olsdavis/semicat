@@ -25,6 +25,7 @@ class SemicatModule(L.LightningModule):
     def __init__(
         self,
         net: nn.Module,
+        in_shape: tuple[int, ...],
         prior_type: Literal["gaussian", "discunif"],
         optimizer,
         scheduler,
@@ -32,6 +33,9 @@ class SemicatModule(L.LightningModule):
         super().__init__()
         torch.set_float32_matmul_precision("high")
         self.save_hyperparameters(logger=False, ignore=["net"])
+        # store in_shape separately, as the type becomes messy otherwise
+        # through self.hparams
+        self.in_shape = tuple(in_shape)
         self.net = net
         self.train_loss = MeanMetric()
         self.val_loss = MeanMetric()
@@ -111,7 +115,6 @@ class SemicatModule(L.LightningModule):
     def sample_batch(
         self,
         batch_size: int,
-        shape: tuple[int, ...],
         x0: Tensor | None = None,
         sampling_method: int | Literal["dopri5"] = 100,
         sampling_args: dict | None = None,
@@ -120,15 +123,15 @@ class SemicatModule(L.LightningModule):
         Samples a batch of data from the model.
         
         :param batch_size: The size of the batch to sample at once.
-        :param shape: The shape of a single data point (excluding batch dimension).
         :param x0: The starting point. If `None`, starts from a prior sample.
         :param sampling_method: The sampling method: either an integer for the number
         of steps, or an ODE solver (available: "dopri5").
         :param sampling_args: Additional arguments for the sampling method. Required if
         and only if `sampling_method` is not an integer.
-        :return: A batch of sampled data.
+        :return: A batch of sampled data (still on the `R^k`, "one-hot encoded" space; `argmax`
+        the last dimension to get the indices).
         """
-        x = x0 or self.prior((batch_size, *shape), device=self.device)
+        x = x0 or self.prior((batch_size, *self.in_shape), device=self.device)
 
         if isinstance(sampling_method, int):
             steps = sampling_method

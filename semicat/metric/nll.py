@@ -1,10 +1,12 @@
 """Enables NLL-based eval using a pre-trained GPT model."""
 
+import os
+
 import numpy as np
 import torch
 from torch import nn
 import transformers
-from transformers import GPTJForCausalLM, AutoTokenizer
+# from transformers import GPTJForCausalLM, AutoTokenizer
 
 
 class GptNll(nn.Module):
@@ -18,6 +20,7 @@ class GptNll(nn.Module):
             torch_dtype=torch.float32,
         )
         self.tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6b")"""
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
         self.model = transformers.AutoModelForCausalLM.from_pretrained("gpt2-large")
         self.tokenizer = transformers.AutoTokenizer.from_pretrained("gpt2")
 

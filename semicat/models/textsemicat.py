@@ -2,7 +2,6 @@
 Text for semicat.
 """
 
-import numpy as np
 import torch
 
 import wandb
@@ -63,12 +62,21 @@ class TextSemicatModule(SemicatModule):
     ) -> float:
         """
         Compute the NLL of a list of strings using a pre-trained GPT model.
+        Comes with added (ugly) logic for GPU inference.
 
         :param strings: The list of strings to compute the NLL for.
         :return: The average NLL of the strings.
         """
         gpt = get_gpt()
-        return gpt(strings)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            gpt = gpt.to(self.device)
+        try:
+            return gpt(strings)
+        finally:
+            if torch.cuda.is_available():
+                gpt = gpt.to("cpu")
+                torch.cuda.empty_cache()
 
     def on_validation_epoch_end(self) -> None:
         super().on_validation_epoch_end()

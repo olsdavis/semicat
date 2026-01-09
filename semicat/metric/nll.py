@@ -3,6 +3,7 @@
 import numpy as np
 import torch
 from torch import nn
+import transformers
 from transformers import GPTJForCausalLM, AutoTokenizer
 
 
@@ -11,12 +12,14 @@ class GptNll(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.model = GPTJForCausalLM.from_pretrained(
+        """self.model = GPTJForCausalLM.from_pretrained(
             "EleutherAI/gpt-j-6b",
             revision="float16",
             torch_dtype=torch.float32,
         )
-        self.tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6b")
+        self.tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6b")"""
+        self.model = transformers.AutoModelForCausalLM.from_pretrained("gpt2-large")
+        self.tokenizer = transformers.AutoTokenizer.from_pretrained("gpt2")
 
     @torch.no_grad()
     def forward(self, samples: list[str]) -> float:
@@ -25,7 +28,7 @@ class GptNll(nn.Module):
         """
         losses = []
         for sample in samples:
-            input_ids = self.tokenizer(sample, return_tensors="pt").input_ids
+            input_ids = self.tokenizer(sample, return_tensors="pt").input_ids.to(self.model.device)
             output = self.model(
                 input_ids,
                 return_dict=True,

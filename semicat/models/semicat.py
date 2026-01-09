@@ -108,7 +108,7 @@ class SemicatModule(L.LightningModule):
         """
         # for now, the schedule is only linear, so:
         dr = self.net(xt, t).softmax(dim=-1) - xt
-        scale = 1.0 / (1.0 - t + 1e-8)
+        scale = 1.0 / (1.0 - view_for(t, xt) + 1e-8)
         return dr * scale
 
     @torch.inference_mode()
@@ -139,7 +139,7 @@ class SemicatModule(L.LightningModule):
             ts = torch.linspace(0.0, 1.0, steps+1, device=self.device)
             for s, t in zip(ts[:-1], ts[1:]):
                 s_fill = view_for(s.expand((batch_size,)), x)
-                v = self.vf(x, s_fill)
+                v = self.vf(x, s_fill.view(-1))
                 x += (t - s) * v
         elif sampling_method == "dopri5":
             assert sampling_args is not None and isinstance(sampling_args, dict)

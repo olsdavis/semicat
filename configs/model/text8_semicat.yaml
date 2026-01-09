@@ -3,7 +3,7 @@ defaults:
 
 in_shape:
   - ${data.k}
-  - ${net.vocab_size}
+  - 27
 
 net:
   hidden_size: 768

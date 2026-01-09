@@ -50,7 +50,12 @@ class TextSemicatModule(SemicatModule):
         table = wandb.Table(columns=["index", "string"])
         for i, s in enumerate(strings):
             table.add_data(i, s)
-        self.logger.experiment.log({f"{prefix}/samples": table}, step=step)
+        if self.logger is not None:
+            self.logger.experiment.log({f"{prefix}/samples": table}, step=step)
+        else:
+            print("No logger found, printing in console:")
+            for i, s in enumerate(strings):
+                print(f"{i}: {s}")
 
     def _compute_nll(
         self,
@@ -58,32 +63,19 @@ class TextSemicatModule(SemicatModule):
     ) -> float:
         """
         Compute the NLL of a list of strings using a pre-trained GPT model.
-        Adds a bit of GPU logic to bring the model to the GPU, and some
-        ugly cache-clearing before and after.
 
         :param strings: The list of strings to compute the NLL for.
         :return: The average NLL of the strings.
         """
         gpt = get_gpt()
-        if torch.cuda.is_available():
-            # not nice, but might be needed to avoid OOM
-            torch.cuda.empty_cache()
-            gpt = gpt.to(self.device)
-
-        nll = np.nan
-
-        try:
-            nll = gpt(strings)
-        finally:
-            if torch.cuda.is_available():
-                gpt = gpt.to("cpu")
-                torch.cuda.empty_cache()
-
-        return nll
+        return gpt(strings)
 
     def on_validation_epoch_end(self) -> None:
         super().on_validation_epoch_end()
-        strings = self.sample_strings_batch(batch_size=512, sampling_method=100)
+        print("Sampling strings for val NLL...")
+        strings = self.sample_strings_batch(batch_size=128, sampling_method=100)
         self._log_strings(strings[:16], prefix="val", step=self.global_step)
+        print("Computing NLL...")
         nll = self._compute_nll(strings)
-        self.log("val/nll@512", nll, on_step=False, on_epoch=True, prog_bar=True)
+        print("Done!")
+        self.log("val/nll@128-100", nll, on_step=False, on_epoch=True, prog_bar=True)

@@ -78,8 +78,8 @@ class Text8DataModule(LightningDataModule):
         self.stoi = self.meta['stoi']
         self.itos = self.meta['itos']
 
-        data_train_base = np.fromfile(os.path.join(data_dir, 'train.bin'), dtype=np.uint8)
-        data_val_base = np.fromfile(os.path.join(data_dir, 'val.bin'), dtype=np.uint8)
+        data_train_base = np.fromfile(os.path.join(data_dir, 'train.bin'), dtype=np.uint16)
+        data_val_base = np.fromfile(os.path.join(data_dir, 'val.bin'), dtype=np.uint16)
         # build dataset
         trl = self.hparams.train_val_test_split[0]
         val = self.hparams.train_val_test_split[1]
@@ -119,6 +119,7 @@ class Text8DataModule(LightningDataModule):
             batch_size=self.batch_size_per_device,
             num_workers=self.hparams.num_workers,
             pin_memory=self.hparams.pin_memory,
+            shuffle=True,
         )
 
     def val_dataloader(self) -> DataLoader[Any]:
@@ -153,4 +154,20 @@ class Text8DataModule(LightningDataModule):
 if __name__ == "__main__":
     module = Text8DataModule((351_563, 20_000, 19_063))
     module.setup()
-    print(next(iter(module.train_dataloader())))
+    #print(next(iter(module.train_dataloader())))
+    from semicat.metric.nll import get_gpt
+    gpt = get_gpt().to("cuda")
+    samples = []
+    batch = next(iter(module.train_dataloader()))
+
+    # Convert one-hot to indices
+    samples = batch.argmax(dim=-1)
+    indices = samples[:5]  # Take first 5 samples
+
+    # Convert to strings
+    strings = module.tensor_to_strings(indices)
+    import ipdb; ipdb.set_trace()
+
+    # Get NLL
+    nll = gpt(strings)
+    import ipdb; ipdb.set_trace()

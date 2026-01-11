@@ -20,15 +20,17 @@ class SemicatModule(L.LightningModule):
     :param net: the underlying net.
     :param prior_type: the type of prior to use, one of "gaussian" (isotropic standard Gaussian),
     "discunif" (discrete uniform).
+    :param sd_prop: the self-distillation proportion of the batch (between 0 and 1).
     """
 
     def __init__(
         self,
         net: nn.Module,
-        in_shape: tuple[int, ...],
-        prior_type: Literal["gaussian", "discunif"],
         optimizer,
         scheduler,
+        in_shape: tuple[int, ...],
+        prior_type: Literal["gaussian", "discunif"],
+        sd_prop: float = 0.25,
     ):
         super().__init__()
         torch.set_float32_matmul_precision("high")
@@ -76,23 +78,59 @@ class SemicatModule(L.LightningModule):
         t = torch.rand(x1.size(0), device=x1.device)
         t = view_for(t, x1)
         xt = (1.0 - t) * x0 + t * x1
-        x1_pred: Tensor = self.net(xt, t.view(-1))
-        loss = F.cross_entropy(x1_pred.transpose(-1, 1), x0.argmax(dim=-1))
-        return loss
+        x1_pred: Tensor = self.net(xt, t.view(-1), t.view(-1))
+        return F.cross_entropy(x1_pred.transpose(-1, 1), x0.argmax(dim=-1))
+
+    def sd_model_step(
+        self,
+        x0: Tensor,
+        x1: Tensor,
+    ) -> Tensor:
+        """
+        Self-distillation semi-cat step.
+
+        :param x1: The (clean) end-point.
+        :param x0: The starting point.
+        :return: The loss.
+        """
+        assert x0.shape == x1.shape
+        t = torch.rand(x1.size(0), device=x1.device)
+        t = view_for(t, x1)
+        s = torch.rand_like(t) * t
+
+        xs = (1.0 - s) * x0 + s * x1
+        xst, dv = torch.func.jvp(
+            lambda _t: self.xst(xs, s.view(-1), _t, jvp_attention=True),
+            primals=(t.view(-1),),
+            tangents=(torch.ones_like(t).view(-1),),
+        )
+        xst = xst.detach()  # no grad
+        with torch.no_grad():
+            dv_target = self.net(xst, t.view(-1), t.view(-1)).softmax(dim=-1)
+
+        return (
+            (1.0 - t) * dv - dv_target + xst
+        ).pow(2).sum(dim=-1).mean()
 
     def model_step(
         self,
         x1: Tensor,
-    ) -> Tensor:
+    ) -> tuple[Tensor, Tensor | None]:
         """
         A full semicat training step.
         
         :param x1: The target tensor, clean data.
-        :return: The loss evaluated on the given data point.
+        :return: The VFM and SD losses (in this order) evaluated on the given data batch. Returns `None`
+        for the SD loss if the part of the batch is zero.
         """
         # for now, only include the VFM step
         x0 = self.prior(x1.shape, device=x1.device)
-        return self.vfm_model_step(x0, x1)
+        sd_split = int(self.hparams.sd_prop * x1.size(0))
+        vf_loss = self.vfm_model_step(x0[sd_split:], x1[sd_split:])
+        if sd_split == 0:
+            return vf_loss, None
+        else:
+            return vf_loss, self.sd_model_step(x0[:sd_split], x1[:sd_split])
 
     def vf(
         self,
@@ -106,13 +144,56 @@ class SemicatModule(L.LightningModule):
         :param t: Current time.
         :return: The vector field at `(xt, t)`.
         """
-        # for now, the schedule is only linear, so:
-        dr = self.net(xt, t).softmax(dim=-1) - xt
+        # NOTE: for now, the schedule is only linear, so:
+        dr = self.net(xt, t, t).softmax(dim=-1) - xt
         scale = 1.0 / (1.0 - view_for(t, xt) + 1e-8)
         return dr * scale
 
+    def xst(
+        self,
+        x: Tensor,
+        s: Tensor,
+        t: Tensor,
+        jvp_attention: bool = False,
+    ) -> Tensor:
+        """
+        Computes the flow map `x_{s,t}`.
+
+        :param x: The starting point.
+        :param s: The starting time.
+        :param t: The end time.
+        :param jvp_attention: Whether to use JVP attention in the model forward pass.
+        :return: The point `x_{s,t}`.
+        """
+        assert s.shape == t.shape
+        dt = (t - s) / (1.0 - s + 1e-8)
+        diff = self.net(x, s.view(-1), t.view(-1), jvp_attention=jvp_attention).softmax(dim=-1) - x
+        return x + view_for(dt, x) * diff
+
     @torch.inference_mode()
-    def sample_batch(
+    def sample_flow_map_batch(
+        self,
+        batch_size: int,
+        sampling_steps: int,
+        x0: Tensor | None = None,
+    ) -> Tensor:
+        """
+        Samples a batch of data from the flow map given by the model, `x_{0,1} = net(x, 0, 1)`.
+
+        :param batch_size: The size of the batch to sample at once.
+        :param sampling_steps: The number of steps to use for the flow map approximation.
+        :param x0: The starting point. If `None`, starts from a prior sample.
+        :return: A batch of sampled data (still on the `R^k`, "one-hot encoded" space; `argmax`
+        the last dimension to get the indices).
+        """
+        x = x0 or self.prior((batch_size, *self.in_shape), device=self.device)
+        ts = torch.linspace(0.0, 1.0, sampling_steps+1, device=self.device)
+        for s, t in zip(ts[:-1], ts[1:]):
+            x = self.xst(x, s.expand((batch_size,)), t.expand((batch_size,)))
+        return x
+
+    @torch.inference_mode()
+    def sample_batch_vf(
         self,
         batch_size: int,
         x0: Tensor | None = None,
@@ -120,8 +201,8 @@ class SemicatModule(L.LightningModule):
         sampling_args: dict | None = None,
     ) -> Tensor:
         """
-        Samples a batch of data from the model.
-        
+        Samples a batch of data from the vector field given by the model, `v(x, t) = net(x, t, t)`.
+
         :param batch_size: The size of the batch to sample at once.
         :param x0: The starting point. If `None`, starts from a prior sample.
         :param sampling_method: The sampling method: either an integer for the number
@@ -156,20 +237,32 @@ class SemicatModule(L.LightningModule):
         return x
 
     def training_step(self, batch: Tensor) -> Tensor:
-        loss = self.model_step(batch)
-        self.train_loss(loss)
+        vf_loss, sd_loss = self.model_step(batch)
+        total_loss = vf_loss + sd_loss if sd_loss is not None else vf_loss
+        self.train_loss(total_loss)
         self.log("train/loss", self.train_loss, on_step=True, on_epoch=True, prog_bar=True)
-        return loss
+        self.log("train/vf_loss", vf_loss, on_step=True, on_epoch=False, prog_bar=True)
+        if sd_loss is not None:
+            self.log("train/sd_loss", sd_loss, on_step=True, on_epoch=False, prog_bar=True)
+        return total_loss
 
     def validation_step(self, batch: Tensor) -> None:
-        loss = self.model_step(batch)
+        vf_loss, sd_loss = self.model_step(batch)
+        total_loss = vf_loss + sd_loss if sd_loss is not None else vf_loss
+        self.val_loss(total_loss)
         self.log("val/loss", self.val_loss, on_step=True, on_epoch=True, prog_bar=True)
-        self.val_loss(loss)
+        self.log("val/vf_loss", vf_loss, on_step=True, on_epoch=False, prog_bar=False)
+        if sd_loss is not None:
+            self.log("val/sd_loss", sd_loss, on_step=True, on_epoch=False, prog_bar=False)
 
     def test_step(self, batch: Tensor) -> None:
-        loss = self.model_step(batch)
+        vf_loss, sd_loss = self.model_step(batch)
+        total_loss = vf_loss + sd_loss if sd_loss is not None else vf_loss
+        self.test_loss(total_loss)
         self.log("test/loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=False)
-        self.test_loss(loss)
+        self.log("test/vf_loss", vf_loss, on_step=False, on_epoch=True, prog_bar=False)
+        if sd_loss is not None:
+            self.log("test/sd_loss", sd_loss, on_step=False, on_epoch=True, prog_bar=False)
 
     def configure_optimizers(self):
         optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())

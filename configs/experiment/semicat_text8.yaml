@@ -18,6 +18,6 @@ data:
 
 logger:
   wandb:
-    group: semicat_text8
-    name: semicat-text8-${seed}
+    group: semicat_sd_text8
+    name: semicat-sd-text8-${seed}
     tags: ["semicat", "text8"]

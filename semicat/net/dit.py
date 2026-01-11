@@ -11,8 +11,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
-from semicat.jvp_utils.functional import sdpa_jvp
-
 
 # Flags required to enable jit fusion kernels
 torch._C._jit_set_profiling_mode(False)

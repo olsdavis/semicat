@@ -1,0 +1,11 @@
+defaults:
+  - base_text_semicat
+
+in_shape:
+  - ${data.k}
+  - 27
+
+net:
+  _target_: semicat.net.song.SongUnet
+  img_resolution: 256
+  in_channels: 27

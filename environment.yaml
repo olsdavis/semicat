@@ -28,10 +28,10 @@ dependencies:
   - python=3.10
   - pip>=23
   - pip:
-    - torch>=2.5.0
-    - torchmetrics
-    - torchvision
-    - lightning>=2.0.0
+    - torch==2.4.1
+    - torchvision==0.19.1
+    - torchmetrics==1.8.2
+    - lightning==2.6.0
     - hydra-core
     - hydra-optuna-sweeper
     - rich>=13.0
@@ -41,4 +41,4 @@ dependencies:
     - wandb
     - einops==0.8.1
     - ninja==1.13.0
-    - flash_attn==... --no-build-isolation
+    - flash_attn==2.7.4.post1 --no-build-isolation

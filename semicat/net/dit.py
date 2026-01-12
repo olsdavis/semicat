@@ -406,7 +406,8 @@ class EmbeddingLayer(nn.Module):
         assert x.ndim == 3
         return torch.einsum(
             "blv,ve->ble",
-            # x,  # TODO: try out with original line: torch.nn.functional.softmax(x, dim=-1).float(),
+            # TODO: ablate?
+            torch.nn.functional.softmax(x, dim=-1).float(),
             self.embedding.float(),
         ).to(x.dtype)
 

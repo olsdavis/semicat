@@ -8,10 +8,21 @@
 """Model architectures and preconditioning schemes used in the paper
 "Elucidating the Design Space of Diffusion-Based Generative Models"."""
 
+import math
 import numpy as np
 import torch
 from torch.nn.functional import silu
 from einops import rearrange
+
+
+@torch.jit.script
+def regular_attention_multi_headed(q, k, v):
+    # Assuming qkv is a tensor with shape [batch, seq_len, 3, num_heads, head_dim]
+    scale_factor = 1 / math.sqrt(q.size(-1))
+    attn_weight = torch.matmul(q, k.transpose(-2, -1)) * scale_factor
+    attn_weight = torch.softmax(attn_weight, dim=-1)
+    return torch.matmul(attn_weight, v).reshape(q.size(0), q.size(1), -1)
+
 
 # ----------------------------------------------------------------------------
 # Unified routine for initializing weights and biases.
@@ -340,8 +351,10 @@ class UNetBlock(torch.nn.Module):
                 )
                 .unbind(2)
             )
-            w = AttentionOp.apply(q, k)
-            a = torch.einsum("nqk,nck->ncq", w, v)
+            # w = AttentionOp.apply(q, k)
+            # a = torch.einsum("nqk,nck->ncq", w, v)
+            a = regular_attention_multi_headed(q, k, v)
+
             x = self.proj(a.reshape(*x.shape)).add_(x)
             x = x * self.skip_scale
         return x

@@ -79,7 +79,7 @@ class SemicatModule(L.LightningModule):
         t = view_for(t, x1)
         xt = (1.0 - t) * x0 + t * x1
         x1_pred: Tensor = self.net(xt, t.view(-1), t.view(-1))
-        return F.cross_entropy(x1_pred.transpose(-1, 1), x0.argmax(dim=-1))
+        return F.cross_entropy(x1_pred.transpose(-1, 1), x1.argmax(dim=-1))
 
     def sd_model_step(
         self,

@@ -62,6 +62,25 @@ class SemicatModule(L.LightningModule):
             return F.one_hot(cats, num_classes=shape[-1]).float()
         raise ValueError(f"unimplemented prior type `{self.hparams.prior_type}`")
 
+    def _interpolate(
+        self, x0: Tensor, x1: Tensor, t: Tensor
+    ) -> Tensor:
+        """
+        Linear interpolation between x0 and x1 at time t.
+
+        :param x0: The starting point, continuous.
+        :param x1: The end point, categorical.
+        :param t: The time (between 0 and 1), broadcastable with x0.
+        :return: The interpolated point.
+        """
+        assert x0.ndim == x1.ndim + 1
+        assert t.ndim == x0.ndim
+        xt = x0 * (1.0 - t)
+        xt.scatter_add_(-1, x1[..., None], t.expand_as(xt[..., :1]))
+        return xt
+        #xtp = (1.0 - t) * x0 + t * F.one_hot(x1, num_classes=x0.size(-1)).float()
+        #assert torch.allclose(xt, xtp)
+
     def vfm_model_step(
         self,
         x0: Tensor,
@@ -74,12 +93,12 @@ class SemicatModule(L.LightningModule):
         :param x0: The starting point.
         :return: The loss (cross-entropy).
         """
-        assert x0.shape == x1.shape
         t = torch.rand(x1.size(0), device=x1.device)
-        t = view_for(t, x1)
-        xt = (1.0 - t) * x0 + t * x1
+        t = view_for(t, x0)
+        # xt = (1.0 - t) * x0 + t * x1
+        xt = self._interpolate(x0, x1, t)
         x1_pred: Tensor = self.net(xt, t.view(-1), t.view(-1))
-        return F.cross_entropy(x1_pred.transpose(-1, 1), x1.argmax(dim=-1))
+        return F.cross_entropy(x1_pred.transpose(-1, 1), x1)
 
     def sd_model_step(
         self,
@@ -93,12 +112,12 @@ class SemicatModule(L.LightningModule):
         :param x0: The starting point.
         :return: The loss.
         """
-        assert x0.shape == x1.shape
         t = torch.rand(x1.size(0), device=x1.device)
-        t = view_for(t, x1)
+        t = view_for(t, x0)
         s = torch.rand_like(t) * t
 
-        xs = (1.0 - s) * x0 + s * x1
+        # xs = (1.0 - s) * x0 + s * x1
+        xs = self._interpolate(x0, x1, s)
         xst, dv = torch.func.jvp(
             lambda _t: self.xst(xs, s.view(-1), _t, jvp_attention=True),
             primals=(t.view(-1),),
@@ -123,9 +142,7 @@ class SemicatModule(L.LightningModule):
         :return: The VFM and SD losses (in this order) evaluated on the given data batch. Returns `None`
         for the SD loss if the part of the batch is zero.
         """
-        # for now, only include the VFM step
-        x1 = F.one_hot(x1.long(), num_classes=self.in_shape[-1]).float()
-        x0 = self.prior(x1.shape, device=x1.device)
+        x0 = self.prior((x1.size(0), *self.in_shape), device=x1.device)
         sd_split = int(self.hparams.sd_prop * x1.size(0))
         vf_loss = self.vfm_model_step(x0[sd_split:], x1[sd_split:])
         if sd_split == 0:

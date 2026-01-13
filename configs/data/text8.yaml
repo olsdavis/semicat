@@ -1,7 +1,8 @@
 _target_: semicat.data.text8.Text8DataModule
 train_val_test_split: [351_563, 20_000, 19_063]
-num_workers: 64
+num_workers: 4
 pin_memory: true
 batch_size: 256
 k: 256
+prefetch_factor: 4
 small_run: false

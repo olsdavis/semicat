@@ -119,11 +119,12 @@ class SemicatModule(L.LightningModule):
         """
         A full semicat training step.
         
-        :param x1: The target tensor, clean data.
+        :param x1: The target tensor, clean data, as indices.
         :return: The VFM and SD losses (in this order) evaluated on the given data batch. Returns `None`
         for the SD loss if the part of the batch is zero.
         """
         # for now, only include the VFM step
+        x1 = F.one_hot(x1.long(), num_classes=self.in_shape[-1]).float()
         x0 = self.prior(x1.shape, device=x1.device)
         sd_split = int(self.hparams.sd_prop * x1.size(0))
         vf_loss = self.vfm_model_step(x0[sd_split:], x1[sd_split:])

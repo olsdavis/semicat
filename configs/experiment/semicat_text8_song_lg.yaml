@@ -28,7 +28,7 @@ model:
     model_channels: 256
 
 data:
-  batch_size: 448
+  batch_size: 400
 
 logger:
   wandb:

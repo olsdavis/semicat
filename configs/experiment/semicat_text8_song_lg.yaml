@@ -33,5 +33,5 @@ data:
 logger:
   wandb:
     group: song_lg_text8
-    name: ${logger.wandb.group}-${seed}
+    name: song_lg_text8-${seed}
     tags: ["semicat", "text8", "song_lg"]

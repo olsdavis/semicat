@@ -11,8 +11,11 @@
 import math
 import numpy as np
 import torch
+from torch.nn import functional as F
 from torch.nn.functional import silu
 from einops import rearrange
+
+from semicat.jvp_utils.functional import sdpa_jvp
 
 
 def regular_attention_multi_headed(q, k, v):
@@ -325,7 +328,7 @@ class UNetBlock(torch.nn.Module):
                 **init_zero,
             )
 
-    def forward(self, x, emb):
+    def forward(self, x, emb, jvp_attention: bool):
         orig = x
         x = self.conv0(silu(self.norm0(x)))
 
@@ -346,13 +349,18 @@ class UNetBlock(torch.nn.Module):
             q, k, v = (
                 self.qkv(self.norm2(x))
                 .reshape(
-                    x.shape[0] * self.num_heads, x.shape[1] // self.num_heads, 3, -1
+                    x.shape[0], self.num_heads, x.shape[1] // self.num_heads, 3, -1
                 )
-                .unbind(2)
+                .unbind(3)
             )
             # w = AttentionOp.apply(q, k)
             # a = torch.einsum("nqk,nck->ncq", w, v)
-            a = regular_attention_multi_headed(q, k, v)
+            #with torch.cuda.amp.autocast(enabled=False):
+            q = q.contiguous(); k = k.contiguous(); v = v.contiguous()
+            if jvp_attention:
+                a = sdpa_jvp(q, k, v)
+            else:
+                a = F.scaled_dot_product_attention(q, k, v)
 
             x = self.proj(a.reshape(*x.shape)).add_(x)
             x = x * self.skip_scale
@@ -621,7 +629,7 @@ class SongUnet(torch.nn.Module):
             elif "aux_residual" in name:
                 x = skips[-1] = aux = (x + block(aux)) / np.sqrt(2)
             else:
-                x = block(x, emb) if isinstance(block, UNetBlock) else block(x)
+                x = block(x, emb, jvp_attention) if isinstance(block, UNetBlock) else block(x)
                 skips.append(x)
 
         # Decoder.
@@ -638,7 +646,7 @@ class SongUnet(torch.nn.Module):
             else:
                 if x.shape[1] != block.in_channels:
                     x = torch.cat([x, skips.pop()], dim=1)
-                x = block(x, emb)
+                x = block(x, emb, jvp_attention) if isinstance(block, UNetBlock) else block(x)
 
         # aux = aux.permute(0, 2, 1)
         aux = rearrange(aux, "... d k -> ... k d")

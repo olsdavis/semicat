@@ -13,7 +13,18 @@ from semicat.metric.nll import get_gpt
 class TextSemicatModule(SemicatModule):
     """
     A text-specialized version of `SemicatModule`.
+
+    :param calc_nll: Whether to calculate NLL at the end of validation epochs.
     """
+
+    def __init__(
+        self,
+        calc_nll: bool = False,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.calc_nll = calc_nll
 
     def sample_strings_batch(
         self,
@@ -74,6 +85,9 @@ class TextSemicatModule(SemicatModule):
         print("Sampling strings for val NLL...")
         strings = self.sample_strings_batch(batch_size=128, sampling_steps=10)
         self._log_strings("val/samples", strings[:16])
+
+        if not self.calc_nll:
+            return
         print("Computing NLL...")
         nll = self._compute_nll(strings)
         print("Done!")

@@ -31,6 +31,7 @@ class SemicatModule(L.LightningModule):
         in_shape: tuple[int, ...],
         prior_type: Literal["gaussian", "discunif"],
         sd_prop: float = 0.25,
+        compile: bool = False,
     ):
         super().__init__()
         torch.set_float32_matmul_precision("high")
@@ -296,3 +297,7 @@ class SemicatModule(L.LightningModule):
                 },
             }
         return {"optimizer": optimizer}
+
+    def setup(self, stage: str):
+        if self.hparams.compile and stage == "fit":
+            self.net = torch.compile(self.net)

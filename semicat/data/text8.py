@@ -9,8 +9,8 @@ from lightning import LightningDataModule
 
 
 class Text8Dataset(Dataset):
-    def __init__(self, all_data: np.ndarray, k: int, dim: int):
-        self.all_data = all_data.astype(np.int32)
+    def __init__(self, all_data: torch.Tensor, k: int, dim: int):
+        self.all_data = all_data
         self.k = k
         self.dim = dim
 
@@ -18,7 +18,7 @@ class Text8Dataset(Dataset):
         return len(self.all_data) - self.k + 1
 
     def __getitem__(self, idx: int) -> torch.Tensor:
-        return torch.from_numpy(self.all_data[idx:idx + self.k]).long()
+        return self.all_data[idx:idx + self.k]
 
 
 class Text8DataModule(LightningDataModule):
@@ -76,8 +76,12 @@ class Text8DataModule(LightningDataModule):
         self.stoi = self.meta['stoi']
         self.itos = self.meta['itos']
 
-        data_train_base = np.fromfile(os.path.join(data_dir, 'train.bin'), dtype=np.uint16)
-        data_val_base = np.fromfile(os.path.join(data_dir, 'val.bin'), dtype=np.uint16)
+        data_train_base = torch.from_numpy(
+            np.fromfile(os.path.join(data_dir, 'train.bin'), dtype=np.uint16).astype(np.int32)
+        ).long()
+        data_val_base = torch.from_numpy(
+            np.fromfile(os.path.join(data_dir, 'val.bin'), dtype=np.uint16).astype(np.int32)
+        ).long()
         # build dataset
         trl = self.hparams.train_val_test_split[0]
         val = self.hparams.train_val_test_split[1]

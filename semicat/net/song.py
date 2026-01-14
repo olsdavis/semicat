@@ -15,7 +15,7 @@ from torch.nn import functional as F
 from torch.nn.functional import silu
 from einops import rearrange
 
-from semicat.jvp_utils.functional import sdpa_jvp
+from semicat.jvp_utils.functional import safe_sdpa_jvp
 
 
 def regular_attention_multi_headed(q, k, v):
@@ -315,15 +315,15 @@ class UNetBlock(torch.nn.Module):
 
         if self.num_heads:
             self.norm2 = GroupNorm(num_channels=out_channels, eps=eps)
-            # self.qkv = Conv1d(
-            #     in_channels=out_channels,
-            #     out_channels=out_channels * 3,
-            #     kernel=1,
-            #     **(init_attn if init_attn is not None else init),
-            # )
-            self.q_proj = Conv1d(in_channels=out_channels, out_channels=out_channels, kernel=1, **(init_attn if init_attn is not None else init))
-            self.k_proj = Conv1d(in_channels=out_channels, out_channels=out_channels, kernel=1, **(init_attn if init_attn is not None else init))
-            self.v_proj = Conv1d(in_channels=out_channels, out_channels=out_channels, kernel=1, **(init_attn if init_attn is not None else init))
+            self.qkv = Conv1d(
+                in_channels=out_channels,
+                out_channels=out_channels * 3,
+                kernel=1,
+                **(init_attn if init_attn is not None else init),
+            )
+            # self.q_proj = Conv1d(in_channels=out_channels, out_channels=out_channels, kernel=1, **(init_attn if init_attn is not None else init))
+            # self.k_proj = Conv1d(in_channels=out_channels, out_channels=out_channels, kernel=1, **(init_attn if init_attn is not None else init))
+            # self.v_proj = Conv1d(in_channels=out_channels, out_channels=out_channels, kernel=1, **(init_attn if init_attn is not None else init))
             self.proj = Conv1d(
                 in_channels=out_channels,
                 out_channels=out_channels,
@@ -349,24 +349,23 @@ class UNetBlock(torch.nn.Module):
         x = x * self.skip_scale
 
         if self.num_heads:
-            # q, k, v = (
-            #     self.qkv(self.norm2(x))
-            #     .reshape(
-            #         x.shape[0], self.num_heads, x.shape[1] // self.num_heads, 3, -1
-            #     )
-            #     .unbind(3)
-            # )
-            norm_x = self.norm2(x)
+            q, k, v = (
+                self.qkv(self.norm2(x))
+                .reshape(
+                    x.shape[0], self.num_heads, x.shape[1] // self.num_heads, 3, -1
+                )
+                .unbind(3)
+            )
 
             # Each projection is naturally contiguous [Batch, Channels, Length]
-            q = self.q_proj(norm_x).reshape(x.shape[0], self.num_heads, -1, x.shape[-1])
-            k = self.k_proj(norm_x).reshape(x.shape[0], self.num_heads, -1, x.shape[-1])
-            v = self.v_proj(norm_x).reshape(x.shape[0], self.num_heads, -1, x.shape[-1])
+            # q = self.q_proj(norm_x).reshape(x.shape[0], self.num_heads, -1, x.shape[-1])
+            # k = self.k_proj(norm_x).reshape(x.shape[0], self.num_heads, -1, x.shape[-1])
+            # v = self.v_proj(norm_x).reshape(x.shape[0], self.num_heads, -1, x.shape[-1])
             # w = AttentionOp.apply(q, k)
             # a = torch.einsum("nqk,nck->ncq", w, v)
             if jvp_attention:
-                # q = q.contiguous(); k = k.contiguous(); v = v.contiguous()
-                a = sdpa_jvp(q, k, v)
+                q = q.contiguous(); k = k.contiguous(); v = v.contiguous()
+                a = safe_sdpa_jvp(q, k, v)
             else:
                 a = F.scaled_dot_product_attention(q, k, v)
 

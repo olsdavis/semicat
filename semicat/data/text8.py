@@ -63,7 +63,6 @@ class Text8DataModule(LightningDataModule):
         """
         Load data. Set variables: `self.data_train`, `self.data_val`, `self.data_test`.
         """
-
         data_dir = self.data_dir
         meta_path = os.path.join(data_dir, 'meta.pkl')
         print(f"loading meta from {meta_path}")
@@ -76,18 +75,20 @@ class Text8DataModule(LightningDataModule):
         self.stoi = self.meta['stoi']
         self.itos = self.meta['itos']
 
+        device = self.trainer.strategy.root_device
+
         data_train_base = torch.from_numpy(
             np.fromfile(os.path.join(data_dir, 'train.bin'), dtype=np.uint16).astype(np.int32)
-        ).long()
+        ).long().to(device, non_blocking=True)
         data_val_base = torch.from_numpy(
             np.fromfile(os.path.join(data_dir, 'val.bin'), dtype=np.uint16).astype(np.int32)
-        ).long()
+        ).long().to(device, non_blocking=True)
         # build dataset
         trl = self.hparams.train_val_test_split[0]
         val = self.hparams.train_val_test_split[1]
         tsl = self.hparams.train_val_test_split[2]
         if self.hparams.small_run:
-            trl = 1024
+            trl = self.hparams.batch_size * 15
             val = 1024
             tsl = 1024
         self.data_train = Text8Dataset(data_train_base[:trl], self.k, self.meta_vocab_size)
@@ -119,9 +120,8 @@ class Text8DataModule(LightningDataModule):
         return DataLoader(
             dataset=self.data_train,
             batch_size=self.batch_size_per_device,
-            num_workers=self.hparams.num_workers,
-            pin_memory=self.hparams.pin_memory,
-            prefetch_factor=self.hparams.prefetch_factor,
+            num_workers=0,
+            pin_memory=False,
             shuffle=True,
         )
 
@@ -134,9 +134,8 @@ class Text8DataModule(LightningDataModule):
         return DataLoader(
             dataset=self.data_val,
             batch_size=self.batch_size_per_device,
-            num_workers=self.hparams.num_workers,
-            pin_memory=self.hparams.pin_memory,
-            prefetch_factor=self.hparams.prefetch_factor,
+            num_workers=0,
+            pin_memory=False,
             shuffle=False,
         )
 

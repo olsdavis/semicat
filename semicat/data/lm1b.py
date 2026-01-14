@@ -1,5 +1,5 @@
 """
-LM1B / OpenWebText DataModule.
+LM1B/OpenWebText DataModule.
 """
 import re
 from lightning import LightningDataModule

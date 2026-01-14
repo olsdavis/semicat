@@ -67,9 +67,9 @@ class Linear(torch.nn.Module):
         )
 
     def forward(self, x):
-        x = x @ self.weight.to(x.dtype).t()
+        x = x @ self.weight.t()
         if self.bias is not None:
-            x = x.add_(self.bias.to(x.dtype))
+            x = x.add_(self.bias)
         return x
 
 
@@ -122,10 +122,10 @@ class Conv1d(torch.nn.Module):
         self.register_buffer("resample_filter", f if up or down else None)
 
     def forward(self, x):
-        w = self.weight.to(x.dtype) if self.weight is not None else None
-        b = self.bias.to(x.dtype) if self.bias is not None else None
+        w = self.weight if self.weight is not None else None
+        b = self.bias if self.bias is not None else None
         f = (
-            self.resample_filter.to(x.dtype)
+            self.resample_filter
             if self.resample_filter is not None
             else None
         )
@@ -189,8 +189,8 @@ class GroupNorm(torch.nn.Module):
         x = torch.nn.functional.group_norm(
             x,
             num_groups=self.num_groups,
-            weight=self.weight.to(x.dtype),
-            bias=self.bias.to(x.dtype),
+            weight=self.weight,
+            bias=self.bias,
             eps=self.eps,
         )
         return x
@@ -329,7 +329,7 @@ class UNetBlock(torch.nn.Module):
         orig = x
         x = self.conv0(silu(self.norm0(x)))
 
-        params = self.affine(emb).unsqueeze(-1).to(x.dtype)
+        params = self.affine(emb).unsqueeze(-1)
         if self.adaptive_scale:
             scale, shift = params.chunk(chunks=2, dim=1)
             x = silu(torch.addcmul(shift, self.norm1(x), scale + 1))

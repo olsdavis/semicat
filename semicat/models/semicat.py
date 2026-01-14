@@ -2,6 +2,7 @@
 Defines the main module for semicat.
 """
 
+from contextlib import nullcontext
 from typing import Literal, cast
 
 import torch
@@ -32,6 +33,7 @@ class SemicatModule(L.LightningModule):
         prior_type: Literal["gaussian", "discunif"],
         sd_prop: float = 0.25,
         compile: bool = False,
+        par_loss: bool = True,
     ):
         super().__init__()
         torch.set_float32_matmul_precision("high")
@@ -145,11 +147,26 @@ class SemicatModule(L.LightningModule):
         """
         x0 = self.prior((x1.size(0), *self.in_shape), device=x1.device)
         sd_split = int(self.hparams.sd_prop * x1.size(0))
-        vf_loss = self.vfm_model_step(x0[sd_split:], x1[sd_split:])
-        if sd_split == 0:
-            return vf_loss, None
+        par_loss = self.hparams.par_loss and sd_split > 0 and x1.device.type == "cuda"
+
+        if sd_split > 0:
+            s1 = torch.cuda.Stream(device=x1.device) if par_loss else None
+            with torch.cuda.stream(s1) if s1 is not None else nullcontext():
+                sd_loss = self.sd_model_step(x0[:sd_split], x1[:sd_split])
         else:
-            return vf_loss, self.sd_model_step(x0[:sd_split], x1[:sd_split])
+            sd_loss = None
+            s1 = None
+
+        s2 = torch.cuda.Stream(device=x1.device) if par_loss else None
+        with torch.cuda.stream(s2) if s2 is not None else nullcontext():
+            vf_loss = self.vfm_model_step(x0[sd_split:], x1[sd_split:])
+
+        if s1 is not None:
+            torch.cuda.current_stream().wait_stream(s1)
+        if s2 is not None:
+            torch.cuda.current_stream().wait_stream(s2)
+
+        return vf_loss, sd_loss
 
     def vf(
         self,

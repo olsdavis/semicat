@@ -11,8 +11,11 @@
 import math
 import numpy as np
 import torch
+from torch.nn import functional as F
 from torch.nn.functional import silu
 from einops import rearrange
+
+from semicat.jvp_utils.functional import safe_sdpa_jvp
 
 
 def regular_attention_multi_headed(q, k, v):
@@ -197,45 +200,6 @@ class GroupNorm(torch.nn.Module):
 
 
 # ----------------------------------------------------------------------------
-# Attention weight computation, i.e., softmax(Q^T * K).
-# Performs all computation using FP32, but uses the original datatype for
-# inputs/outputs/gradients to conserve memory.
-
-
-class AttentionOp(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, q, k):
-        w = (
-            torch.einsum(
-                "ncq,nck->nqk",
-                q.to(torch.float32),
-                (k / np.sqrt(k.shape[1])).to(torch.float32),
-            )
-            .softmax(dim=2)
-            .to(q.dtype)
-        )
-        ctx.save_for_backward(q, k, w)
-        return w
-
-    @staticmethod
-    def backward(ctx, dw):
-        q, k, w = ctx.saved_tensors
-        db = torch._softmax_backward_data(
-            grad_output=dw.to(torch.float32),
-            output=w.to(torch.float32),
-            dim=2,
-            input_dtype=torch.float32,
-        )
-        dq = torch.einsum("nck,nqk->ncq", k.to(torch.float32), db).to(
-            q.dtype
-        ) / np.sqrt(k.shape[1])
-        dk = torch.einsum("ncq,nqk->nck", q.to(torch.float32), db).to(
-            k.dtype
-        ) / np.sqrt(k.shape[1])
-        return dq, dk
-
-
-# ----------------------------------------------------------------------------
 # Unified U-Net block with optional up/downsampling and self-attention.
 # Represents the union of all features employed by the DDPM++, NCSN++, and
 # ADM architectures.
@@ -318,6 +282,9 @@ class UNetBlock(torch.nn.Module):
                 kernel=1,
                 **(init_attn if init_attn is not None else init),
             )
+            # self.q_proj = Conv1d(in_channels=out_channels, out_channels=out_channels, kernel=1, **(init_attn if init_attn is not None else init))
+            # self.k_proj = Conv1d(in_channels=out_channels, out_channels=out_channels, kernel=1, **(init_attn if init_attn is not None else init))
+            # self.v_proj = Conv1d(in_channels=out_channels, out_channels=out_channels, kernel=1, **(init_attn if init_attn is not None else init))
             self.proj = Conv1d(
                 in_channels=out_channels,
                 out_channels=out_channels,
@@ -325,7 +292,7 @@ class UNetBlock(torch.nn.Module):
                 **init_zero,
             )
 
-    def forward(self, x, emb):
+    def forward(self, x, emb, jvp_attention: bool):
         orig = x
         x = self.conv0(silu(self.norm0(x)))
 
@@ -346,13 +313,22 @@ class UNetBlock(torch.nn.Module):
             q, k, v = (
                 self.qkv(self.norm2(x))
                 .reshape(
-                    x.shape[0] * self.num_heads, x.shape[1] // self.num_heads, 3, -1
+                    x.shape[0], self.num_heads, x.shape[1] // self.num_heads, 3, -1
                 )
-                .unbind(2)
+                .unbind(3)
             )
+
+            # Each projection is naturally contiguous [Batch, Channels, Length]
+            # q = self.q_proj(norm_x).reshape(x.shape[0], self.num_heads, -1, x.shape[-1])
+            # k = self.k_proj(norm_x).reshape(x.shape[0], self.num_heads, -1, x.shape[-1])
+            # v = self.v_proj(norm_x).reshape(x.shape[0], self.num_heads, -1, x.shape[-1])
             # w = AttentionOp.apply(q, k)
             # a = torch.einsum("nqk,nck->ncq", w, v)
-            a = regular_attention_multi_headed(q, k, v)
+            if jvp_attention:
+                q = q.contiguous(); k = k.contiguous(); v = v.contiguous()
+                a = safe_sdpa_jvp(q, k, v)
+            else:
+                a = F.scaled_dot_product_attention(q, k, v)
 
             x = self.proj(a.reshape(*x.shape)).add_(x)
             x = x * self.skip_scale
@@ -374,7 +350,7 @@ class PositionalEmbedding(torch.nn.Module):
         )
         freqs = freqs / (self.num_channels // 2 - (1 if self.endpoint else 0))
         freqs = (1 / self.max_positions) ** freqs
-        self.register_buffer("freqs", freqs)
+        self.register_buffer("freqs", freqs, persistent=False)
 
     def forward(self, x):
         x = x[..., None] * self.freqs
@@ -392,7 +368,7 @@ class FourierEmbedding(torch.nn.Module):
         self.register_buffer("freqs", torch.randn(num_channels // 2) * scale)
 
     def forward(self, x):
-        x = x.ger((2 * np.pi * self.freqs).to(x.dtype))
+        x = x.ger((2 * np.pi * self.freqs))
         x = torch.cat([x.cos(), x.sin()], dim=1)
         return x
 
@@ -621,7 +597,7 @@ class SongUnet(torch.nn.Module):
             elif "aux_residual" in name:
                 x = skips[-1] = aux = (x + block(aux)) / np.sqrt(2)
             else:
-                x = block(x, emb) if isinstance(block, UNetBlock) else block(x)
+                x = block(x, emb, jvp_attention) if isinstance(block, UNetBlock) else block(x)
                 skips.append(x)
 
         # Decoder.
@@ -638,7 +614,7 @@ class SongUnet(torch.nn.Module):
             else:
                 if x.shape[1] != block.in_channels:
                     x = torch.cat([x, skips.pop()], dim=1)
-                x = block(x, emb)
+                x = block(x, emb, jvp_attention) if isinstance(block, UNetBlock) else block(x)
 
         # aux = aux.permute(0, 2, 1)
         aux = rearrange(aux, "... d k -> ... k d")

@@ -42,3 +42,5 @@ dependencies:
     - einops==0.8.1
     - ninja==1.13.0
     - flash_attn==2.7.4.post1 --no-build-isolation
+    - pyarrow==14.0.2
+    - datasets==2.19.2

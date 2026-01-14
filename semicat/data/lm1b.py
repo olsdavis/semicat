@@ -59,10 +59,7 @@ class _AlignDataset(torch.utils.data.IterableDataset):
                 chunk = [self.eos] + buf[:to_take] + [self.eos]
                 assert len(chunk) == self.block_size
                 buf = buf[to_take:]
-                yield {
-                    "input_ids": torch.tensor(chunk, dtype=torch.long),
-                    "attention_mask": torch.ones(self.block_size, dtype=torch.long),
-                }
+                yield torch.tensor(chunk, dtype=torch.long)
 
 
 class LM1BDataModule(LightningDataModule):
@@ -88,7 +85,8 @@ class LM1BDataModule(LightningDataModule):
 
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token  # no vocab resize
-
+        if self.tokenizer.eos_token is None:
+            self.tokenizer.eos_token = self.tokenizer.sep_token
 
     def _load_dataset(self, split: str):
         assert self.tokenizer is not None, "need tokenizer"
@@ -110,7 +108,7 @@ class LM1BDataModule(LightningDataModule):
             dataset.set_transform(
                 lm1b_detokenizer,
             )
-        self.bos = self.tokenizer.encode(self.tokenizer.bos_token)[0]
+        # self.bos = self.tokenizer.encode(self.tokenizer.bos_token)[0]
         self.eos = self.tokenizer.encode(self.tokenizer.eos_token)[0]
         return _AlignDataset(dataset, self.tokenizer, self.hparams.max_length, shuffle=(split == "train"))
 

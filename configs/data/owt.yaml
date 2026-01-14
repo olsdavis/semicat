@@ -1,0 +1,4 @@
+_target_: semicat.data.lm1b.LM1BDataModule
+batch_size: 64
+max_length: 1024
+dataset: owt

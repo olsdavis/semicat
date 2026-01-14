@@ -15,7 +15,6 @@ from torch.nn.functional import silu
 from einops import rearrange
 
 
-@torch.jit.script
 def regular_attention_multi_headed(q, k, v):
     # Assuming qkv is a tensor with shape [batch, seq_len, 3, num_heads, head_dim]
     scale_factor = 1 / math.sqrt(q.size(-1))

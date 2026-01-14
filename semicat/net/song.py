@@ -200,45 +200,6 @@ class GroupNorm(torch.nn.Module):
 
 
 # ----------------------------------------------------------------------------
-# Attention weight computation, i.e., softmax(Q^T * K).
-# Performs all computation using FP32, but uses the original datatype for
-# inputs/outputs/gradients to conserve memory.
-
-
-class AttentionOp(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, q, k):
-        w = (
-            torch.einsum(
-                "ncq,nck->nqk",
-                q.to(torch.float32),
-                (k / np.sqrt(k.shape[1])).to(torch.float32),
-            )
-            .softmax(dim=2)
-            .to(q.dtype)
-        )
-        ctx.save_for_backward(q, k, w)
-        return w
-
-    @staticmethod
-    def backward(ctx, dw):
-        q, k, w = ctx.saved_tensors
-        db = torch._softmax_backward_data(
-            grad_output=dw.to(torch.float32),
-            output=w.to(torch.float32),
-            dim=2,
-            input_dtype=torch.float32,
-        )
-        dq = torch.einsum("nck,nqk->ncq", k.to(torch.float32), db).to(
-            q.dtype
-        ) / np.sqrt(k.shape[1])
-        dk = torch.einsum("ncq,nqk->nck", q.to(torch.float32), db).to(
-            k.dtype
-        ) / np.sqrt(k.shape[1])
-        return dq, dk
-
-
-# ----------------------------------------------------------------------------
 # Unified U-Net block with optional up/downsampling and self-attention.
 # Represents the union of all features employed by the DDPM++, NCSN++, and
 # ADM architectures.
@@ -389,7 +350,7 @@ class PositionalEmbedding(torch.nn.Module):
         )
         freqs = freqs / (self.num_channels // 2 - (1 if self.endpoint else 0))
         freqs = (1 / self.max_positions) ** freqs
-        self.register_buffer("freqs", freqs)
+        self.register_buffer("freqs", freqs, persistent=False)
 
     def forward(self, x):
         x = x[..., None] * self.freqs
@@ -407,7 +368,7 @@ class FourierEmbedding(torch.nn.Module):
         self.register_buffer("freqs", torch.randn(num_channels // 2) * scale)
 
     def forward(self, x):
-        x = x.ger((2 * np.pi * self.freqs).to(x.dtype))
+        x = x.ger((2 * np.pi * self.freqs))
         x = torch.cat([x.cos(), x.sin()], dim=1)
         return x
 

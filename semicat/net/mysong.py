@@ -17,26 +17,6 @@ from torch.nn.functional import silu
 from semicat.jvp_utils.functional import safe_sdpa_jvp
 
 
-# ----------------------------------------------------------------------------
-# Unified routine for initializing weights and biases.
-
-
-def weight_init(shape, mode, fan_in, fan_out):
-    if mode == "xavier_uniform":
-        return np.sqrt(6 / (fan_in + fan_out)) * (torch.rand(*shape) * 2 - 1)
-    if mode == "xavier_normal":
-        return np.sqrt(2 / (fan_in + fan_out)) * torch.randn(*shape)
-    if mode == "kaiming_uniform":
-        return np.sqrt(3 / fan_in) * (torch.rand(*shape) * 2 - 1)
-    if mode == "kaiming_normal":
-        return np.sqrt(1 / fan_in) * torch.randn(*shape)
-    raise ValueError(f'Invalid init mode "{mode}"')
-
-
-# ----------------------------------------------------------------------------
-# Group normalization.
-
-
 class WrapGroupNorm(nn.GroupNorm):
     def __init__(self, num_channels, num_groups=32, min_channels_per_group=4, eps=1e-5):
         super().__init__(
@@ -44,11 +24,6 @@ class WrapGroupNorm(nn.GroupNorm):
             num_channels,
             eps=eps,
         )
-
-# ----------------------------------------------------------------------------
-# Unified U-Net block with optional up/downsampling and self-attention.
-# Represents the union of all features employed by the DDPM++, NCSN++, and
-# ADM architectures.
 
 
 class UNetBlock(torch.nn.Module):
@@ -189,10 +164,6 @@ class UNetBlock(torch.nn.Module):
         return x
 
 
-# ----------------------------------------------------------------------------
-# Timestep embedding used in the DDPM++ and ADM architectures.
-
-
 class PositionalEmbedding(torch.nn.Module):
     def __init__(self, num_channels, max_positions=10000, endpoint=False):
         super().__init__()
@@ -204,19 +175,12 @@ class PositionalEmbedding(torch.nn.Module):
         )
         freqs = freqs / (self.num_channels // 2 - (1 if self.endpoint else 0))
         freqs = (1 / self.max_positions) ** freqs
-        self.register_buffer("freqs", freqs)
+        self.register_buffer("freqs", freqs[None, ...], persistent=False)
 
     def forward(self, x):
         x = x[..., None] * self.freqs
-        x = torch.cat([x.cos(), x.sin()], dim=1)
+        x = torch.cat([x.sin(), x.cos()], dim=1)
         return x
-
-
-# ----------------------------------------------------------------------------
-# Reimplementation of the DDPM++ and NCSN++ architectures from the paper
-# "Score-Based Generative Modeling through Stochastic Differential
-# Equations". Equivalent to the original implementation by Ssng et al.,
-# available at https://github.com/yang-song/score_sde_pytorch
 
 
 class MySongUNet(torch.nn.Module):
@@ -325,8 +289,6 @@ class MySongUNet(torch.nn.Module):
         self.fin_conv = nn.Conv1d(in_channels=cout, out_channels=out_channels, kernel_size=3, padding=1)
 
     def forward(self, x, s, t, jvp_attention: bool = False):
-        t = t.view(-1)
-        s = s.view(-1)
         # reparam
         t = t - s
         # swap classes and sequence positions
@@ -334,15 +296,9 @@ class MySongUNet(torch.nn.Module):
 
         # Embedding t
         emb_t = self.t_map(t)
-        emb_t = (
-            emb_t.reshape(emb_t.shape[0], 2, -1).flip(1).reshape(*emb_t.shape)
-        )  # swap sin/cos
         emb_t = self.embed_t(emb_t)
         # Embedding s
         emb_s = self.s_map(s)
-        emb_s = (
-            emb_s.reshape(emb_s.shape[0], 2, -1).flip(1).reshape(*emb_s.shape)
-        )  # swap sin/cos
         emb_s = self.embed_s(emb_s)
         emb = emb_t + emb_s
 

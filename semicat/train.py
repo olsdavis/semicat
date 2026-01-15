@@ -38,6 +38,7 @@ from semicat.utils import (
 )
 
 
+# Useful for fixed shapes
 torch.backends.cudnn.benchmark=True
 
 

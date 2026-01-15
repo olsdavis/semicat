@@ -10,6 +10,7 @@ seed: 12345
 trainer:
   min_epochs: 100
   max_epochs: 500
+  precision: bf16-mixed
 
 model:
   net:

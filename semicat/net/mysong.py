@@ -8,20 +8,13 @@
 """Model architectures and preconditioning schemes used in the paper
 "Elucidating the Design Space of Diffusion-Based Generative Models"."""
 
-import math
 import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
 from torch.nn.functional import silu
 
-
-def regular_attention_multi_headed(q, k, v):
-    # Assuming qkv is a tensor with shape [batch, seq_len, 3, num_heads, head_dim]
-    scale_factor = 1 / math.sqrt(q.size(-1))
-    attn_weight = torch.matmul(q, k.transpose(-2, -1)) * scale_factor
-    attn_weight = torch.softmax(attn_weight, dim=-1)
-    return torch.matmul(attn_weight, v).reshape(q.size(0), q.size(1), -1)
+from semicat.jvp_utils.functional import safe_sdpa_jvp
 
 
 # ----------------------------------------------------------------------------
@@ -179,13 +172,17 @@ class UNetBlock(torch.nn.Module):
             q, k, v = (
                 self.qkv(self.norm2(x))
                 .reshape(
-                    x.shape[0] * self.num_heads, x.shape[1] // self.num_heads, 3, -1
+                    x.shape[0], self.num_heads, x.shape[1] // self.num_heads, 3, -1
                 )
-                .unbind(2)
+                .unbind(3)
             )
             # w = AttentionOp.apply(q, k)
             # a = torch.einsum("nqk,nck->ncq", w, v)
-            a = regular_attention_multi_headed(q, k, v)
+            if jvp_attention:
+                q = q.contiguous(); k = k.contiguous(); v = v.contiguous()
+                a = safe_sdpa_jvp(q, k, v)
+            else:
+                a = F.scaled_dot_product_attention(q, k, v)
 
             x = self.proj(a.reshape(*x.shape)).add_(x)
             x = x * self.skip_scale

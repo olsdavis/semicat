@@ -31,7 +31,7 @@ class SemicatModule(L.LightningModule):
         in_shape: tuple[int, ...],
         prior_type: Literal["gaussian", "discunif"],
         sd_prop: float = 0.25,
-        compile: bool = True,
+        compile: bool = False,
     ):
         super().__init__()
         torch.set_float32_matmul_precision("high")

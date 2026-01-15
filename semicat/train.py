@@ -37,6 +37,10 @@ from semicat.utils import (
     task_wrapper,
 )
 
+
+torch.backends.cudnn.benchmark=True
+
+
 log = RankedLogger(__name__, rank_zero_only=True)
 
 

@@ -1,0 +1,37 @@
+# @package _global_
+
+defaults:
+  - override /data: text8
+  - override /model: text8_semicat_song
+  - override /trainer: default
+
+seed: 12345
+
+trainer:
+  min_epochs: 100
+  max_epochs: 500
+  precision: bf16-mixed
+
+model:
+  net:
+    _target_: semicat.net.mysong.MySongUNet
+    img_resolution: 256
+    in_channels: 27
+    channel_mult:
+      - 1
+      - 2
+      - 2
+      - 2
+    attn_resolutions:
+      - 32
+      - 64
+    model_channels: 256
+  compile: true
+
+tags: ["semicat", "text8", "mysong"]
+
+logger:
+  wandb:
+    group: semicat_sd_text8-mysong
+    name: semicat-sd-text8-mysong-${seed}
+    tags: ["semicat", "text8", "mysong"]

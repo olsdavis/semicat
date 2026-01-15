@@ -160,12 +160,12 @@ class UNetBlock(torch.nn.Module):
         x = self.conv0(silu(self.norm0(x)))
 
         params = self.affine(emb).unsqueeze(-1)
-        x = silu(self.norm1(x.add_(params)))
+        x = silu(self.norm1(x.add(params)))
 
         x = self.conv1(
             torch.nn.functional.dropout(x, p=self.dropout, training=self.training)
         )
-        x = x.add_(self.skip(orig) if self.skip is not None else orig)
+        x = x.add(self.skip(orig) if self.skip is not None else orig)
         x = x * self.skip_scale
 
         if self.num_heads:
@@ -184,7 +184,7 @@ class UNetBlock(torch.nn.Module):
             else:
                 a = F.scaled_dot_product_attention(q, k, v)
 
-            x = self.proj(a.reshape(*x.shape)).add_(x)
+            x = self.proj(a.reshape(*x.shape)).add(x)
             x = x * self.skip_scale
         return x
 
@@ -273,7 +273,6 @@ class MySongUNet(torch.nn.Module):
         )
 
         # Encoder.
-        # self.enc = torch.nn.ModuleDict()
         self.enc = nn.ModuleList()
         cout = in_channels
         self.pre_proj = nn.Conv1d(in_channels=cout, out_channels=model_channels, kernel_size=3, padding=1)
@@ -284,9 +283,6 @@ class MySongUNet(torch.nn.Module):
                 cin = cout
                 cout = model_channels
             else:
-                # self.enc[f"{res}x{res}_down"] = UNetBlock(
-                #     in_channels=cout, out_channels=cout, down=True, **block_kwargs
-                # )
                 self.enc.append(
                     UNetBlock(in_channels=cout, out_channels=cout, down=True, **block_kwargs)
                 )
@@ -295,9 +291,6 @@ class MySongUNet(torch.nn.Module):
                 cin = cout
                 cout = model_channels * mult
                 attn = res in attn_resolutions
-                # self.enc[f"{res}x{res}_block{idx}"] = UNetBlock(
-                #     in_channels=cin, out_channels=cout, attention=attn, **block_kwargs
-                # )
                 self.enc.append(
                     UNetBlock(in_channels=cin, out_channels=cout, attention=attn, **block_kwargs)
                 )
@@ -308,12 +301,6 @@ class MySongUNet(torch.nn.Module):
         for level, mult in reversed(list(enumerate(channel_mult))):
             res = img_resolution >> level
             if level == len(channel_mult) - 1:
-                # self.dec[f"{res}x{res}_in0"] = UNetBlock(
-                #     in_channels=cout, out_channels=cout, attention=True, **block_kwargs
-                # )
-                # self.dec[f"{res}x{res}_in1"] = UNetBlock(
-                #     in_channels=cout, out_channels=cout, **block_kwargs
-                # )
                 self.dec.append(
                     UNetBlock(in_channels=cout, out_channels=cout, attention=True, **block_kwargs)
                 )
@@ -321,9 +308,6 @@ class MySongUNet(torch.nn.Module):
                     UNetBlock(in_channels=cout, out_channels=cout, **block_kwargs)
                 )
             else:
-                # self.dec[f"{res}x{res}_up"] = UNetBlock(
-                #     in_channels=cout, out_channels=cout, up=True, **block_kwargs
-                # )
                 self.dec.append(
                     UNetBlock(in_channels=cout, out_channels=cout, up=True, **block_kwargs)
                 )
@@ -331,9 +315,6 @@ class MySongUNet(torch.nn.Module):
                 cin = cout + skips.pop()
                 cout = model_channels * mult
                 attn = idx == num_blocks and res in attn_resolutions
-                # self.dec[f"{res}x{res}_block{idx}"] = UNetBlock(
-                #     in_channels=cin, out_channels=cout, attention=attn, **block_kwargs
-                # )
                 self.dec.append(
                     UNetBlock(in_channels=cin, out_channels=cout, attention=attn, **block_kwargs)
                 )
@@ -351,7 +332,6 @@ class MySongUNet(torch.nn.Module):
         # swap classes and sequence positions
         x = x.transpose(1, 2)
 
-        x = x.float()
         # Embedding t
         emb_t = self.t_map(t)
         emb_t = (
@@ -367,7 +347,6 @@ class MySongUNet(torch.nn.Module):
         emb = emb_t + emb_s
 
         # Encoder.
-        aux = x
         x = self.pre_proj(x)
         skips = [x]
 
@@ -376,8 +355,6 @@ class MySongUNet(torch.nn.Module):
             skips.append(x)
 
         # Decoder.
-        aux = None
-        tmp = None
         for block in self.dec:
             if x.shape[1] != block.in_channels:
                 x = torch.cat([x, skips.pop()], dim=1)
@@ -385,7 +362,5 @@ class MySongUNet(torch.nn.Module):
 
         tmp = self.fin_norm(x)
         tmp = self.fin_conv(silu(tmp))
-        aux = tmp if aux is None else tmp + aux
 
-        aux = aux.transpose(1, 2)
-        return aux
+        return tmp.transpose(1, 2)

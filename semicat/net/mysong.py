@@ -54,7 +54,8 @@ class UNetBlock(torch.nn.Module):
             else out_channels // channels_per_head
         )
         self.dropout = dropout
-        self.skip_scale = skip_scale
+        # self.skip_scale = skip_scale
+        self.register_buffer("skip_scale", torch.tensor(skip_scale, dtype=torch.float32), persistent=False)
 
         self.norm0 = WrapGroupNorm(num_channels=in_channels, eps=eps)
         if up:

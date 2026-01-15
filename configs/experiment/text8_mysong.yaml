@@ -15,6 +15,7 @@ trainer:
 model:
   net:
     _target_: semicat.net.mysong.MySongUNet
+  compile: true
 
 tags: ["semicat", "text8", "mysong"]
 

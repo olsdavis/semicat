@@ -298,6 +298,6 @@ class SemicatModule(L.LightningModule):
             }
         return {"optimizer": optimizer}
 
-    def setup(self, stage: str):
-        if self.hparams.compile and stage == "fit":
-            self.net = torch.compile(self.net)
+    def on_fit_start(self) -> None:
+        if self.hparams.compile:
+            self.net = torch.compile(self.net, mode="reduce-overhead")

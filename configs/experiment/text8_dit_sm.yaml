@@ -13,6 +13,11 @@ trainer:
   precision: bf16-true
 
 model:
+  optimizer:
+    _target_: torch.optim.SGD
+    _partial_: true
+    lr: 1e-4
+    momentum: 0.9
   net:
     hidden_size: 512
     depth: 6

@@ -81,6 +81,25 @@ def modulate(x, shift, scale):
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
 
 
+class EmbeddingLayer(nn.Module):
+    def __init__(self, dim, vocab_dim):
+        super().__init__()
+        self.embedding = nn.Parameter(torch.empty((vocab_dim, dim)))
+        torch.nn.init.kaiming_uniform_(self.embedding, a=math.sqrt(5))
+        # torch.nn.init.xavier_uniform_(self.embedding)
+
+    def forward(self, x):
+        if x.ndim == 2:
+            return self.embedding[x]
+        assert x.ndim == 3
+        return torch.einsum(
+            "blv,ve->ble",
+            # TODO: ablate?
+            torch.nn.functional.softmax(x, dim=-1).float(),
+            self.embedding.float(),
+        ).to(x.dtype)
+
+
 #################################################################################
 #               Embedding Layers for Timesteps and Class Labels                 #
 #################################################################################
@@ -282,7 +301,7 @@ class DiT(nn.Module):
         self.sequence_length = sequence_length
         self.learn_guidance = learn_guidance
 
-        self.x_proj = nn.Linear(in_dim, hidden_size)
+        self.x_proj = EmbeddingLayer(hidden_size, in_dim)
 
         temb_size = hidden_size * temb_mult
 
@@ -316,7 +335,7 @@ class DiT(nn.Module):
             hidden_size, in_dim, do_mod_norm=do_mod_norm
         )
 
-        self.initialize_weights()
+        #self.initialize_weights()
 
     def initialize_weights(self):
         # Initialize transformer layers:

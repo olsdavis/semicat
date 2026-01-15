@@ -13,6 +13,13 @@ trainer:
 
 tags: ["semicat", "text8"]
 
+model:
+  optimizer:
+    _target_: torch.optim.AdamW
+    _partial_: true
+    lr: 1e-4
+    weight_decay: 0.01
+
 data:
   batch_size: 128  # to fit on 20GB
 

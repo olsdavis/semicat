@@ -15,6 +15,11 @@ trainer:
 tags: ["semicat", "text8", "song_lg"]
 
 model:
+  optimizer:
+    _target_: torch.optim.AdamW
+    _partial_: true
+    lr: 1e-4
+    weight_decay: 0.01
   net:
     img_resolution: 256
     in_channels: 27

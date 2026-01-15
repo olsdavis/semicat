@@ -11,7 +11,7 @@ model_checkpoint:
   monitor: "val/loss"
   mode: "min"
   save_last: True
-  save_top_k: 0
+  save_top_k: 1
   auto_insert_metric_name: False
 
 early_stopping:

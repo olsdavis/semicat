@@ -179,8 +179,9 @@ class PositionalEmbedding(torch.nn.Module):
 
     def forward(self, x):
         x = x[..., None] * self.freqs
-        x = torch.cat([x.sin(), x.cos()], dim=1)
-        return x
+        s = x.sin()
+        c = x.cos()
+        return torch.stack((s, c), dim=-1).view(x.shape[0], -1)
 
 
 class MySongUNet(torch.nn.Module):

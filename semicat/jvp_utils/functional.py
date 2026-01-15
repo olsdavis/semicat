@@ -316,7 +316,7 @@ def safe_sdpa_jvp(
     A wrapper around `sdpa_jvp` that casts inputs to bfloat16 if they are not yet.
     """
     orig_dtype = q.dtype
-    if orig_dtype not in [torch.bfloat16, torch.float16]:
+    if orig_dtype != torch.bfloat16 and orig_dtype != torch.float16:
         q = q.to(torch.bfloat16)
         k = k.to(torch.bfloat16)
         v = v.to(torch.bfloat16)

@@ -10,19 +10,19 @@
 # MAE: https://github.com/facebookresearch/mae/blob/main/models_mae.py
 # --------------------------------------------------------
 
+import math
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
-import math
-import functools
-
-from einops import repeat
 
 from functools import partial
-from einops import rearrange, einsum
 
-# from jvp_utils.functional import sdpa_jvp
+from timm.models.vision_transformer import Mlp
+
+from einops import rearrange
+
+from semicat.jvp_utils.functional import safe_sdpa_jvp
 
 
 class Attention(nn.Module):
@@ -63,13 +63,7 @@ class Attention(nn.Module):
 
         # q,k,v: (B, H, L, D)
         if use_sdpa_jvp:
-            if not torch.is_autocast_enabled():
-                q = q.to(torch.bfloat16)
-                k = k.to(torch.bfloat16)
-                v = v.to(torch.bfloat16)
-            x = sdpa_jvp(q, k, v)
-            if not torch.is_autocast_enabled():
-                x = x.to(torch.float32)
+            x = safe_sdpa_jvp(q, k, v)
         else:
             x = F.scaled_dot_product_attention(q, k, v)
 
@@ -85,6 +79,25 @@ def rmsnorm_noweight(input, eps=1e-6):
 
 def modulate(x, shift, scale):
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+
+
+class EmbeddingLayer(nn.Module):
+    def __init__(self, dim, vocab_dim):
+        super().__init__()
+        self.embedding = nn.Parameter(torch.empty((vocab_dim, dim)))
+        torch.nn.init.kaiming_uniform_(self.embedding, a=math.sqrt(5))
+        # torch.nn.init.xavier_uniform_(self.embedding)
+
+    def forward(self, x):
+        if x.ndim == 2:
+            return self.embedding[x]
+        assert x.ndim == 3
+        return torch.einsum(
+            "blv,ve->ble",
+            # TODO: ablate?
+            torch.nn.functional.softmax(x, dim=-1).float(),
+            self.embedding.float(),
+        ).to(x.dtype)
 
 
 #################################################################################
@@ -202,11 +215,10 @@ class DiTBlock(nn.Module):
             hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs
         )
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
-        approx_gelu = lambda: nn.GELU(approximate="tanh")
         self.mlp = Mlp(
             in_features=hidden_size,
             hidden_features=mlp_hidden_dim,
-            act_layer=approx_gelu,
+            act_layer=partial(nn.GELU, approximate="tanh"),
             drop=dropout,
         )
         self.adaLN_modulation = nn.Sequential(
@@ -239,11 +251,11 @@ class FinalLayer(nn.Module):
     The final layer of DiT.
     """
 
-    def __init__(self, hidden_size, patch_size, out_channels, do_mod_norm=True):
+    def __init__(self, hidden_size, in_size, do_mod_norm=True):
         super().__init__()
         self.norm_final = nn.RMSNorm(hidden_size, elementwise_affine=False, eps=1e-6)
 
-        self.linear = nn.Linear(hidden_size, patch_size * patch_size * out_channels)
+        self.linear = nn.Linear(hidden_size, in_size)
         self.adaLN_modulation = nn.Sequential(
             nn.SiLU(), nn.Linear(hidden_size, 2 * hidden_size)
         )
@@ -268,30 +280,28 @@ class DiT(nn.Module):
 
     def __init__(
         self,
-        img_resolution,
-        patch_size=2,
-        in_channels=4,
+        in_dim,
+        sequence_length,
         hidden_size=1152,
         depth=28,
         num_heads=16,
         mlp_ratio=4.0,
-        num_classes=1000,
         embedding_kwargs={},
         temb_mult=1,
         dropout=0,
         qk_norm=True,
-        learn_guidance=True,
+        learn_guidance=False,
         do_mod_norm=True,
         init_type="spectral",
         time_specinit=False,
         **kwargs,
     ):
         super().__init__()
-        self.in_channels = in_channels
-        self.out_channels = in_channels
-        self.patch_size = patch_size
         self.num_heads = num_heads
+        self.sequence_length = sequence_length
         self.learn_guidance = learn_guidance
+
+        self.x_proj = EmbeddingLayer(hidden_size, in_dim)
 
         temb_size = hidden_size * temb_mult
 
@@ -300,13 +310,10 @@ class DiT(nn.Module):
             TimestepEmbedder(temb_size, **embedding_kwargs) if learn_guidance else None
         )
 
-        # self.t_embedder = TimestepEmbedder(hidden_size, use_mlp=False)
         self.t_embedder = TimestepEmbedder(temb_size, **embedding_kwargs)
-        self.y_embedder = LabelEmbedder(num_classes + 1, temb_size, 0.0)
-        num_patches = self.x_embedder.num_patches
         # Will use fixed sin-cos embedding:
         self.pos_embed = nn.Parameter(
-            torch.zeros(1, num_patches, hidden_size), requires_grad=False
+            torch.zeros(1, sequence_length, hidden_size), requires_grad=False
         )
         self.blocks = nn.ModuleList(
             [
@@ -325,10 +332,10 @@ class DiT(nn.Module):
         self.init_type = init_type
         self.time_specinit = time_specinit
         self.final_layer = FinalLayer(
-            hidden_size, patch_size, self.out_channels, do_mod_norm=do_mod_norm
+            hidden_size, in_dim, do_mod_norm=do_mod_norm
         )
 
-        self.initialize_weights()
+        #self.initialize_weights()
 
     def initialize_weights(self):
         # Initialize transformer layers:
@@ -364,24 +371,21 @@ class DiT(nn.Module):
         # Initialize (and freeze) pos_embed by sin-cos embedding:
         pos_embed = get_2d_sincos_pos_embed(
             self.pos_embed.shape[-1],
-            int(self.x_embedder.num_patches**0.5),
+            int(self.sequence_length**0.5),
         )
         self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
         # Initialize patch_embed like nn.Linear (instead of nn.Conv2d):
-        w = self.x_embedder.proj.weight.data
-        if self.init_type == "spectral":
-            nn.init.xavier_normal_(w.view([w.shape[0], -1]))
-            u, s, v = torch.svd(w.view([w.shape[0], -1]))
-            w.data = 1.0 * w.data / s[0]
-        else:
-            nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
-
-        if self.x_embedder.proj.bias is not None:
-            nn.init.constant_(self.x_embedder.proj.bias, 0)
+        # w = self.x_embedder.proj.weight.data
+        # if self.init_type == "spectral":
+        #     nn.init.xavier_normal_(w.view([w.shape[0], -1]))
+        #     u, s, v = torch.svd(w.view([w.shape[0], -1]))
+        #     w.data = 1.0 * w.data / s[0]
+        # else:
+        #     nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
 
         # Initialize label embedding table:
-        nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
+        # nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
 
         # Initialize timestep embedding MLP:
         if self.t_embedder:
@@ -442,30 +446,12 @@ class DiT(nn.Module):
         if self.final_layer.linear.bias is not None:
             nn.init.constant_(self.final_layer.linear.bias, 0)
 
-    def unpatchify(self, x):
-        """
-        x: (N, T, patch_size**2 * C)
-        imgs: (N, H, W, C)
-        """
-        c = self.out_channels
-        p = self.x_embedder.patch_size[0]
-        h = w = int(x.shape[1] ** 0.5)
-        assert h * w == x.shape[1]
-
-        x = x.reshape(shape=(x.shape[0], h, w, p, p, c))
-        x = torch.einsum("nhwpqc->nchpwq", x)
-        imgs = x.reshape(shape=(x.shape[0], c, h * p, h * p))
-        return imgs
-
     def forward(
         self,
         x,
         s,
         t,
-        class_labels=None,
-        guidance_scale=None,
         jvp_attention=False,
-        **model_kwargs,
     ):
         """
         Forward pass of DiT.
@@ -477,30 +463,12 @@ class DiT(nn.Module):
         noise_labels_t = t
         noise_labels_ts = s
 
-        # tmp = 1 - class_labels.sum(dim=1, keepdims=True)
-        # y = torch.cat([class_labels, tmp], dim=1)
-        # y = y.argmax(dim=1)
-
-        x = (
-            self.x_embedder(x) + self.pos_embed
-        )  # (N, T, D), where T = H * W / patch_size ** 2
-
-        if noise_labels_t.shape[0] == 1:
-            noise_labels_t = repeat(noise_labels_t, "1 ... -> B ...", B=x.shape[0])
+        x = self.x_proj(x) + self.pos_embed  # (N, T, D)
 
         t = self.t_embedder(noise_labels_t)  # (N, D)
-        if noise_labels_ts is not None:
-            ts = self.s_embedder(noise_labels_ts)
+        ts = self.s_embedder(noise_labels_ts)
 
-            t = t + ts
-
-        if self.guidance_embedder is not None and guidance_scale is not None:
-
-            if guidance_scale.shape[0] == 1:
-                guidance_scale = repeat(guidance_scale, "1 ... -> B ...", B=x.shape[0])
-
-            g = self.guidance_embedder(guidance_scale)
-            t = t + g
+        t = t + ts
 
         # y = self.y_embedder(y, self.training)  # (N, D)
         c = t  # + y  # (N, D)
@@ -508,8 +476,7 @@ class DiT(nn.Module):
         for block in self.blocks:
             x = block(x, c, use_sdpa_jvp=use_sdpa_jvp)  # (N, T, D)
 
-        x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
-        #x = self.unpatchify(x)  # (N, out_channels, H, W)
+        x = self.final_layer(x, c)  # (N, T, in_dim)
 
         return x
 

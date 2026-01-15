@@ -1,0 +1,24 @@
+# @package _global_
+
+defaults:
+  - override /data: text8
+  - override /model: text8_dit_lg
+  - override /trainer: default
+
+seed: 12345
+
+trainer:
+  min_epochs: 100
+  max_epochs: 500
+  precision: bf16-true
+
+tags: ["semicat", "text8", "dit"]
+
+data:
+  batch_size: 128
+
+logger:
+  wandb:
+    group: text8_dit_lg
+    name: ${logger.wandb.group}-${seed}
+    tags: ["semicat", "text8", "dit"]

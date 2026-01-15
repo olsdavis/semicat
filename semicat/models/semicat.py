@@ -164,7 +164,7 @@ class SemicatModule(L.LightningModule):
         :return: The vector field at `(xt, t)`.
         """
         # NOTE: for now, the schedule is only linear, so:
-        dr = self.net(xt, t, t).softmax(dim=-1) - xt
+        dr = self.net(xt, t.view(-1), t.view(-1)).softmax(dim=-1) - xt
         scale = 1.0 / (1.0 - view_for(t, xt) + 1e-8)
         return dr * scale
 
@@ -298,6 +298,6 @@ class SemicatModule(L.LightningModule):
             }
         return {"optimizer": optimizer}
 
-    def setup(self, stage: str):
-        if self.hparams.compile and stage == "fit":
-            self.net = torch.compile(self.net)
+    def on_fit_start(self) -> None:
+        if self.hparams.compile:
+            self.net = torch.compile(self.net, mode="reduce-overhead")

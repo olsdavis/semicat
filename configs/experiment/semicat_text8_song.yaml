@@ -12,6 +12,13 @@ trainer:
   max_epochs: 500
   precision: bf16-mixed
 
+model:
+  optimizer:
+    _target_: torch.optim.AdamW
+    _partial_: true
+    lr: 1e-4
+    weight_decay: 0.01
+
 tags: ["semicat", "text8", "song"]
 
 logger:

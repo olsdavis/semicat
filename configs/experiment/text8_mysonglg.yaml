@@ -12,8 +12,6 @@ trainer:
   max_epochs: 500
   precision: bf16-mixed
 
-tags: ["semicat", "text8", "song_lg"]
-
 model:
   optimizer:
     _target_: torch.optim.AdamW
@@ -21,6 +19,7 @@ model:
     lr: 1e-4
     weight_decay: 0.01
   net:
+    _target_: semicat.net.mysong.MySongUNet
     img_resolution: 256
     in_channels: 27
     channel_mult:
@@ -32,12 +31,12 @@ model:
       - 32
       - 64
     model_channels: 256
+  compile: true
 
-data:
-  batch_size: 400
+tags: ["semicat", "text8", "mysong"]
 
 logger:
   wandb:
-    group: song_lg_text8
-    name: ${logger.wandb.group}-${seed}
-    tags: ["semicat", "text8", "song_lg"]
+    group: semicat_sd_text8-mysong
+    name: semicat-sd-text8-mysong-${seed}
+    tags: ["semicat", "text8", "mysong"]

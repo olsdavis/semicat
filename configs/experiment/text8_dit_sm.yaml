@@ -1,0 +1,34 @@
+# @package _global_
+
+defaults:
+  - override /data: text8
+  - override /model: text8_dit_lg
+  - override /trainer: default
+
+seed: 12345
+
+trainer:
+  min_epochs: 100
+  max_epochs: 500
+  precision: bf16-true
+
+model:
+  optimizer:
+    _target_: torch.optim.SGD
+    _partial_: true
+    lr: 1e-4
+    momentum: 0.9
+  net:
+    hidden_size: 512
+    depth: 6
+
+tags: ["semicat", "text8", "dit"]
+
+data:
+  batch_size: 128  # to fit on 20GB
+
+logger:
+  wandb:
+    group: text8_dit_lg
+    name: ${logger.wandb.group}-${seed}
+    tags: ["semicat", "text8", "dit"]

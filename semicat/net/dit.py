@@ -22,7 +22,7 @@ from timm.models.vision_transformer import Mlp
 
 from einops import rearrange
 
-from semicat.jvp_utils.functional import sdpa_jvp
+from semicat.jvp_utils.functional import safe_sdpa_jvp
 
 
 class Attention(nn.Module):
@@ -63,13 +63,7 @@ class Attention(nn.Module):
 
         # q,k,v: (B, H, L, D)
         if use_sdpa_jvp:
-            if not torch.is_autocast_enabled():
-                q = q.to(torch.bfloat16)
-                k = k.to(torch.bfloat16)
-                v = v.to(torch.bfloat16)
-            x = sdpa_jvp(q, k, v)
-            if not torch.is_autocast_enabled():
-                x = x.to(torch.float32)
+            x = safe_sdpa_jvp(q, k, v)
         else:
             x = F.scaled_dot_product_attention(q, k, v)
 

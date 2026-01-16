@@ -41,6 +41,8 @@ dependencies:
     - wandb
     - einops==0.8.1
     - ninja==1.13.0
+    - transformers==4.41.0
     - pyarrow==14.0.2
+    - torchdiffeq==0.2.5
     - datasets==2.19.2
     # - flash_attn==2.7.4.post1 --no-build-isolation --no-cache-dir

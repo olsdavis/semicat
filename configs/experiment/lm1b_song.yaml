@@ -28,6 +28,7 @@ model:
     attn_resolutions:
       - 128
     model_channels: 256
+  sd_prop: 0.0
 
 data:
   batch_size: 64

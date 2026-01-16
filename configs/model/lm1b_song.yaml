@@ -6,6 +6,6 @@ in_shape:
   - 30000
 
 net:
-  _target_: semicat.net.song.SongUnet
+  _target_: semicat.net.mysong.MySongUNet
   img_resolution: 1024
   in_channels: 30000

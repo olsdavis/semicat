@@ -85,19 +85,18 @@ class EmbeddingLayer(nn.Module):
     def __init__(self, dim, vocab_dim):
         super().__init__()
         self.embedding = nn.Parameter(torch.empty((vocab_dim, dim)))
-        torch.nn.init.kaiming_uniform_(self.embedding, a=math.sqrt(5))
-        # torch.nn.init.xavier_uniform_(self.embedding)
+        #torch.nn.init.kaiming_uniform_(self.embedding, a=math.sqrt(5))
+        torch.nn.init.xavier_uniform_(self.embedding)
 
     def forward(self, x):
-        if x.ndim == 2:
-            return self.embedding[x]
         assert x.ndim == 3
         return torch.einsum(
             "blv,ve->ble",
             # TODO: ablate?
-            torch.nn.functional.softmax(x, dim=-1).float(),
-            self.embedding.float(),
-        ).to(x.dtype)
+            # torch.nn.functional.softmax(x, dim=-1).float(),
+            x,
+            self.embedding,
+        )
 
 
 #################################################################################
@@ -315,6 +314,14 @@ class DiT(nn.Module):
         self.pos_embed = nn.Parameter(
             torch.zeros(1, sequence_length, hidden_size), requires_grad=False
         )
+
+        # Initialize (and freeze) pos_embed by sin-cos embedding:
+        pos_embed = get_2d_sincos_pos_embed(
+            self.pos_embed.shape[-1],
+            int(self.sequence_length**0.5),
+        )
+        self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
+
         self.blocks = nn.ModuleList(
             [
                 DiTBlock(
@@ -335,7 +342,7 @@ class DiT(nn.Module):
             hidden_size, in_dim, do_mod_norm=do_mod_norm
         )
 
-        #self.initialize_weights()
+        self.initialize_weights()
 
     def initialize_weights(self):
         # Initialize transformer layers:
@@ -351,29 +358,11 @@ class DiT(nn.Module):
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0)
 
-            elif isinstance(module, nn.Linear):
-                if self.init_type == "xunif":
-                    nn.init.xavier_uniform_(module.weight)
-                elif self.init_type == "spectral":
-                    nn.init.xavier_normal_(module.weight)
-                    u, s, v = torch.svd(module.weight)
-                    module.weight.data = 1.0 * module.weight.data / s[0]
-
-                if module.bias is not None:
-                    nn.init.constant_(module.bias, 0)
-
             elif isinstance(module, nn.RMSNorm):
                 if module.weight is not None:
                     nn.init.constant_(module.weight, 1.0)
 
         self.apply(_basic_init)
-
-        # Initialize (and freeze) pos_embed by sin-cos embedding:
-        pos_embed = get_2d_sincos_pos_embed(
-            self.pos_embed.shape[-1],
-            int(self.sequence_length**0.5),
-        )
-        self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
         # Initialize patch_embed like nn.Linear (instead of nn.Conv2d):
         # w = self.x_embedder.proj.weight.data
@@ -434,15 +423,15 @@ class DiT(nn.Module):
             )
 
         # Zero-out adaLN modulation layers in DiT blocks:
-        for block in self.blocks:
-            nn.init.constant_(block.adaLN_modulation[-1].weight, 0)
-            nn.init.constant_(block.adaLN_modulation[-1].bias, 0)
+        #for block in self.blocks:
+        #    nn.init.constant_(block.adaLN_modulation[-1].weight, 0)
+        #    nn.init.constant_(block.adaLN_modulation[-1].bias, 0)
 
         # Zero-out output layers:
-        nn.init.constant_(self.final_layer.adaLN_modulation[-1].weight, 0)
+        nn.init.normal_(self.final_layer.adaLN_modulation[-1].weight, std=0.02)
         nn.init.constant_(self.final_layer.adaLN_modulation[-1].bias, 0)
 
-        nn.init.constant_(self.final_layer.linear.weight, 0)
+        nn.init.normal_(self.final_layer.linear.weight, std=0.02)
         if self.final_layer.linear.bias is not None:
             nn.init.constant_(self.final_layer.linear.bias, 0)
 
@@ -463,7 +452,7 @@ class DiT(nn.Module):
         noise_labels_t = t
         noise_labels_ts = s
 
-        x = self.x_proj(x) + self.pos_embed  # (N, T, D)
+        x = self.x_proj(x)# + self.pos_embed  # (N, T, D)
 
         t = self.t_embedder(noise_labels_t)  # (N, D)
         ts = self.s_embedder(noise_labels_ts)

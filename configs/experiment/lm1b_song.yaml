@@ -18,7 +18,7 @@ model:
     _target_: torch.optim.AdamW
     _partial_: true
     lr: 1e-4
-    weight_decay: 0.01
+    weight_decay: 0.0
   net:
     channel_mult:
       - 1
@@ -30,7 +30,7 @@ model:
     model_channels: 256
 
 data:
-  batch_size: 32
+  batch_size: 128
 
 logger:
   wandb:

@@ -134,15 +134,20 @@ class SemicatModule(L.LightningModule):
 
     def model_step(
         self,
-        x1: Tensor,
+        batch: Tensor | dict[str, Tensor],
     ) -> tuple[Tensor, Tensor | None]:
         """
         A full semicat training step.
         
-        :param x1: The target tensor, clean data, as indices.
+        :param batch: The input batch, either a tensor or a dictionary containing "input_ids".
         :return: The VFM and SD losses (in this order) evaluated on the given data batch. Returns `None`
         for the SD loss if the part of the batch is zero.
         """
+        if isinstance(batch, dict):
+            x1 = batch["input_ids"]
+        else:
+            x1 = batch
+
         x0 = self.prior((x1.size(0), *self.in_shape), device=x1.device)
         sd_split = int(self.hparams.sd_prop * x1.size(0))
         vf_loss = self.vfm_model_step(x0[sd_split:], x1[sd_split:])
@@ -255,7 +260,7 @@ class SemicatModule(L.LightningModule):
 
         return x
 
-    def training_step(self, batch: Tensor) -> Tensor:
+    def training_step(self, batch: Tensor | dict[str, Tensor]) -> Tensor:
         vf_loss, sd_loss = self.model_step(batch)
         total_loss = vf_loss + sd_loss if sd_loss is not None else vf_loss
         self.train_loss(total_loss)
@@ -265,7 +270,7 @@ class SemicatModule(L.LightningModule):
             self.log("train/sd_loss", sd_loss, on_step=True, on_epoch=False, prog_bar=True)
         return total_loss
 
-    def validation_step(self, batch: Tensor) -> None:
+    def validation_step(self, batch: Tensor | dict[str, Tensor]) -> None:
         vf_loss, sd_loss = self.model_step(batch)
         total_loss = vf_loss + sd_loss if sd_loss is not None else vf_loss
         self.val_loss(total_loss)
@@ -274,7 +279,7 @@ class SemicatModule(L.LightningModule):
         if sd_loss is not None:
             self.log("val/sd_loss", sd_loss, on_step=True, on_epoch=False, prog_bar=False)
 
-    def test_step(self, batch: Tensor) -> None:
+    def test_step(self, batch: Tensor | dict[str, Tensor]) -> None:
         vf_loss, sd_loss = self.model_step(batch)
         total_loss = vf_loss + sd_loss if sd_loss is not None else vf_loss
         self.test_loss(total_loss)

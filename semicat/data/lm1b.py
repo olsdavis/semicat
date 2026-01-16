@@ -52,7 +52,7 @@ class _AlignDataset(torch.utils.data.IterableDataset):
         buf = []
         to_take = self.block_size - 2
         for ex in self.dataset:
-            ids = self.tokenizer(ex["text"], add_special_tokens=False)["input_ids"]
+            ids = self.tokenizer(ex["text"], add_special_tokens=False, return_attention_mask=False)["input_ids"]
             buf.extend(ids)
             # emit as many full chunks as possible
             while len(buf) >= to_take:
@@ -60,6 +60,9 @@ class _AlignDataset(torch.utils.data.IterableDataset):
                 assert len(chunk) == self.block_size
                 buf = buf[to_take:]
                 yield torch.tensor(chunk, dtype=torch.long)
+            if len(buf) > 0:
+                # add an end token (to split different sequences)
+                buf += [self.eos]
 
 
 class LM1BDataModule(LightningDataModule):

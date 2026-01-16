@@ -5,7 +5,7 @@
 # - conda allows for installing packages without requiring certain compilers or
 #   libraries to be available in the system, since it installs precompiled binaries
 
-name: semicat
+name: flash_semicat
 
 channels:
   - pytorch
@@ -41,6 +41,6 @@ dependencies:
     - wandb
     - einops==0.8.1
     - ninja==1.13.0
-    - flash_attn==2.7.4.post1 --no-build-isolation
     - pyarrow==14.0.2
     - datasets==2.19.2
+    # - flash_attn==2.7.4.post1 --no-build-isolation --no-cache-dir

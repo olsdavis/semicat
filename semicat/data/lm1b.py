@@ -67,7 +67,7 @@ class LM1BDataModule(LightningDataModule):
         self,
         batch_size: int = 64,
         max_length: int = 1024,
-        dataset: str = "owt",
+        dataset: str = "lm1b",
     ):
         assert dataset in ["lm1b", "owt"], f"unsupported dataset '{dataset}'"
         super().__init__()
@@ -119,6 +119,12 @@ class LM1BDataModule(LightningDataModule):
         self.val_dataset = self._load_dataset("test")
         self.test_dataset = self._load_dataset("test")
 
+    def tensor_to_strings(self, batch: torch.Tensor) -> list[str]:
+        assert self.tokenizer is not None, "need tokenizer"
+        assert batch.shape == (batch.size(0), self.hparams.max_length)
+        ret = self.tokenizer.batch_decode(batch)
+        return ret
+
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
             self.train_dataset,
@@ -143,7 +149,7 @@ if __name__ == "__main__":
     it = iter(dl)
     samples = []
     for i in range(10):
-        example = next(it)["input_ids"]
+        example = next(it)
         print(example.shape)
         import ipdb; ipdb.set_trace()
         samples += [example]

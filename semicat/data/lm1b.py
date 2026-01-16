@@ -1,6 +1,7 @@
 """
 LM1B/OpenWebText DataModule.
 """
+
 import re
 from lightning import LightningDataModule
 import datasets
@@ -79,9 +80,9 @@ class LM1BDataModule(LightningDataModule):
 
     def _load_tokenizer(self):
         if self.hparams.dataset == "lm1b":
-            self.tokenizer = transformers.BertTokenizer.from_pretrained("bert-base-uncased")
+            self.tokenizer = transformers.BertTokenizer.from_pretrained("bert-base-uncased", trust_remote_code=True, local_files_only=True)
         else:
-            self.tokenizer = transformers.AutoTokenizer.from_pretrained("gpt2")
+            self.tokenizer = transformers.AutoTokenizer.from_pretrained("gpt2", trust_remote_code=True, local_files_only=True)
 
         self.tokenizer.padding_side = "right"
         self.tokenizer.truncation_side = "right"
@@ -106,6 +107,7 @@ class LM1BDataModule(LightningDataModule):
             split=split,
             keep_in_memory=False,
             cache_dir=cache_dir,
+            trust_remote_code=True,
         )
         if self.hparams.dataset == "lm1b":
             dataset.set_transform(
@@ -151,8 +153,8 @@ if __name__ == "__main__":
     dl = lm.train_dataloader()
     it = iter(dl)
     samples = []
-    for i in range(10):
+    for i in range(100):
         example = next(it)
         print(example.shape)
-        import ipdb; ipdb.set_trace()
         samples += [example]
+    import ipdb; ipdb.set_trace()

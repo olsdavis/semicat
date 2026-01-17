@@ -11,6 +11,8 @@ trainer:
   min_epochs: 100
   max_epochs: 500
   precision: bf16-mixed
+  # gradient accumulation
+  accumulate_grad_batches: 6
 
 tags: ["semicat", "text8", "song_lg"]
 

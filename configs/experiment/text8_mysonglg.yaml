@@ -11,6 +11,7 @@ trainer:
   min_epochs: 100
   max_epochs: 500
   precision: bf16-mixed
+  accumulate_grad_batches: 6
 
 model:
   optimizer:
@@ -37,6 +38,6 @@ tags: ["semicat", "text8", "mysong"]
 
 logger:
   wandb:
-    group: semicat_sd_text8-mysong
-    name: semicat-sd-text8-mysong-${seed}
+    group: semicat_sd_text8-mysong_BB
+    name: ${logger.wandb.group}-${seed}
     tags: ["semicat", "text8", "mysong"]

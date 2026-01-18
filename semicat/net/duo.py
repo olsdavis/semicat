@@ -285,15 +285,7 @@ class DDiTBlock(nn.Module):
             x = bias_dropout_scale_fn(
                 self.attn_out(x), None, gate_msa, x_skip, self.dropout
             )
-            x = modulate_fused(self.norm2(x), shift_mlp, scale_mlp)
-            x = self.mlp(x)
-            x = bias_dropout_scale_fn(
-                x,
-                None,
-                gate_mlp,
-                x,
-                self.dropout,
-            )
+            x = bias_dropout_scale_fn(self.mlp(modulate_fused(self.norm2(x), shift_mlp, scale_mlp)), None, gate_mlp, x, self.dropout)
         else:
             scale = torch.ones(1, device=x.device)  #, dtype=x.dtype)
             x = bias_dropout_scale_fn(
@@ -308,14 +300,15 @@ class DDiTBlock(nn.Module):
 class EmbeddingLayer(nn.Module):
     def __init__(self, dim, vocab_dim):
         super().__init__()
+        # self.layer_norm = nn.LayerNorm(vocab_dim)
         self.seq = nn.Sequential(
-            nn.Conv1d(vocab_dim, dim, kernel_size=1, bias=True),
-            nn.SiLU(),
-            nn.Conv1d(dim, dim, kernel_size=1, bias=True),
+            nn.Linear(vocab_dim, dim),
         )
 
     def forward(self, x):
-        return self.seq(x.transpose(1,2)).transpose(1,2)
+        # x = self.layer_norm(x)
+        x = x / (x.shape[-1] ** 0.5)
+        return self.seq(x)
 
 
 class DDiTFinalLayer(nn.Module):

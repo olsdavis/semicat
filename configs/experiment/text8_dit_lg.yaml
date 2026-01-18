@@ -12,6 +12,13 @@ trainer:
   max_epochs: 500
   precision: bf16-true
 
+model:
+  optimizer:
+    _target_: torch.optim.AdamW
+    _partial_: true
+    lr: 1e-4
+    weight_decay: 0.0
+
 tags: ["semicat", "text8", "dit"]
 
 data:

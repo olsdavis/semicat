@@ -452,7 +452,7 @@ class DiT(nn.Module):
         noise_labels_t = t
         noise_labels_ts = s
 
-        x = self.x_proj(x)# + self.pos_embed  # (N, T, D)
+        x = self.x_proj(x) + self.pos_embed  # (N, T, D)
 
         t = self.t_embedder(noise_labels_t)  # (N, D)
         ts = self.s_embedder(noise_labels_ts)

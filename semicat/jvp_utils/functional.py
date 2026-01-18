@@ -308,10 +308,10 @@ def sdpa_jvp(
 
 
 def safe_sdpa_jvp(
-    q: Float[Tensor, "B H S D"],
-    k: Float[Tensor, "B H S D"],
-    v: Float[Tensor, "B H S D"],
-) -> Float[Tensor, "B H S D"]:
+    q: Float[Tensor, "B S H D"],
+    k: Float[Tensor, "B S H D"],
+    v: Float[Tensor, "B S H D"],
+) -> Float[Tensor, "B S H D"]:
     """
     A wrapper around `sdpa_jvp` that casts inputs to bfloat16 if they are not yet.
     """
@@ -321,8 +321,12 @@ def safe_sdpa_jvp(
         k = k.to(torch.bfloat16)
         v = v.to(torch.bfloat16)
 
+    q = q.transpose(1, 2)  # B S H D -> B H S D
+    k = k.transpose(1, 2)  # B S H D -> B H S D
+    v = v.transpose(1, 2)  # B S H D -> B H S D
+
     y = sdpa_jvp(q, k, v)
 
     if y.dtype != orig_dtype:
         y = y.to(orig_dtype)
-    return y
+    return y.transpose(1, 2)  # B H S D -> B S H D

@@ -2,7 +2,7 @@
 
 defaults:
   - override /data: text8
-  - override /model: text8_dit_lg
+  - override /model: text8_duo
   - override /trainer: default
 
 seed: 12345
@@ -10,25 +10,22 @@ seed: 12345
 trainer:
   min_epochs: 100
   max_epochs: 500
-  precision: bf16-true
+  precision: bf16-mixed
 
 model:
   optimizer:
-    _target_: torch.optim.SGD
+    _target_: torch.optim.AdamW
     _partial_: true
     lr: 1e-4
-    momentum: 0.9
-  net:
-    hidden_size: 512
-    depth: 6
+    weight_decay: 0.0
 
-tags: ["semicat", "text8", "dit"]
+tags: ["semicat", "text8", "duo"]
 
 data:
   batch_size: 128  # to fit on 20GB
 
 logger:
   wandb:
-    group: text8_dit_lg
+    group: text8_duo
     name: ${logger.wandb.group}-${seed}
-    tags: ["semicat", "text8", "dit"]
+    tags: ["semicat", "text8", "duo"]

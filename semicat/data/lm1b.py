@@ -180,14 +180,17 @@ class LM1BDataModule(LightningDataModule):
 
 
 if __name__ == "__main__":
-    lm = LM1BDataModule(max_length=128, dataset="lm1b")
+    lm = LM1BDataModule(max_length=128, dataset="lm1b", batch_size=1024)
     lm.setup("fit")
     dl = lm.train_dataloader()
     it = iter(dl)
     samples = []
     for i in range(100):
         example = next(it)
-        print(example["input_ids"].shape)
+        print(example["input_ids"].shape, example["input_ids"].max())
         samples += [example]
-        if i >= 39:
+        if example["input_ids"].max() >= 30_000:
             import ipdb; ipdb.set_trace()
+        if i >= 39:
+            pass
+            #import ipdb; ipdb.set_trace()

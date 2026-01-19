@@ -15,9 +15,9 @@ trainer:
 model:
   in_shape:
     - 128
-    - 30000
+    - 30522
   net:
-    vocab_size: 30000
+    vocab_size: 30522
     length: 128
   optimizer:
     _target_: torch.optim.AdamW

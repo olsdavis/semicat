@@ -689,16 +689,22 @@ def init_to_zero(name):
     return lambda nargs: nargs[name].zero_()
 
 
+
+import torch
+# NOTE: if not at least hopper, cap the block sizes
+is_hopper = torch.cuda.get_device_capability()[0] >= 9
+
+
 @triton.autotune(
     configs=[
         triton.Config(
-            {"BLOCK_M": 128, "BLOCK_N": 128, "SEQUENCE_PARALLEL": False},
+            {"BLOCK_M": 128 if is_hopper else 64, "BLOCK_N": 128 if is_hopper else 64, "SEQUENCE_PARALLEL": False},
             num_warps=8,
             num_stages=1,
             pre_hook=init_to_zero("DQ"),
         ),
         triton.Config(
-            {"BLOCK_M": 128, "BLOCK_N": 128, "SEQUENCE_PARALLEL": True},
+            {"BLOCK_M": 128 if is_hopper else 64, "BLOCK_N": 128 if is_hopper else 64, "SEQUENCE_PARALLEL": True},
             num_warps=8,
             num_stages=1,
             pre_hook=init_to_zero("DQ"),

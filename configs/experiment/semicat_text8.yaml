@@ -19,6 +19,8 @@ model:
     _partial_: true
     lr: 1e-4
     weight_decay: 0.01
+  net:
+    length: ${data.k}
 
 data:
   batch_size: 128  # to fit on 20GB

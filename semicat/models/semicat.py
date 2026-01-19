@@ -305,4 +305,4 @@ class SemicatModule(L.LightningModule):
 
     def on_fit_start(self) -> None:
         if self.hparams.compile:
-            self.net = torch.compile(self.net, mode="reduce-overhead")
+            self.net = torch.compile(self.net)

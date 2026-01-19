@@ -3,9 +3,8 @@ Changed architecture from Duo to be able to edit.
 """
 
 import math
-import typing
 
-import einops
+# import einops
 import flash_attn
 import flash_attn.layers.rotary
 import torch
@@ -14,92 +13,31 @@ import torch.nn.functional as F
 
 from semicat.jvp_utils.functional import safe_sdpa_jvp
 
-# Flags required to enable jit fusion kernels
-torch._C._jit_set_profiling_mode(False)
-torch._C._jit_set_profiling_executor(False)
-torch._C._jit_override_can_fuse_on_cpu(True)
-torch._C._jit_override_can_fuse_on_gpu(True)
-
-
-def bias_dropout_add_scale(
-    x: torch.Tensor,
-    bias: typing.Optional[torch.Tensor],
-    scale: torch.Tensor,
-    residual: typing.Optional[torch.Tensor],
-    prob: float,
-    training: bool,
-) -> torch.Tensor:
-    if bias is not None:
-        out = scale * F.dropout(x + bias, p=prob, training=training)
-    else:
-        out = scale * F.dropout(x, p=prob, training=training)
-
-    if residual is not None:
-        out = residual + out
-    return out
-
-
-def get_bias_dropout_add_scale(training):
-    def _bias_dropout_add(x, bias, scale, residual, prob):
-        return bias_dropout_add_scale(x, bias, scale, residual, prob, training)
-
-    return _bias_dropout_add
-
-
-# function overload
-def modulate(x: torch.Tensor, shift: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
-    return x * (1.0 + scale) + shift
-
-
-def bias_dropout_add_scale_fused_train(
-    x: torch.Tensor,
-    bias: typing.Optional[torch.Tensor],
-    scale: torch.Tensor,
-    residual: typing.Optional[torch.Tensor],
-    prob: float,
-) -> torch.Tensor:
-    return bias_dropout_add_scale(x, bias, scale, residual, prob, True)
-
-
-def bias_dropout_add_scale_fused_inference(
-    x: torch.Tensor,
-    bias: typing.Optional[torch.Tensor],
-    scale: torch.Tensor,
-    residual: typing.Optional[torch.Tensor],
-    prob: float,
-) -> torch.Tensor:
-    return bias_dropout_add_scale(x, bias, scale, residual, prob, False)
-
 
 def modulate_fused(
     x: torch.Tensor, shift: torch.Tensor, scale: torch.Tensor
 ) -> torch.Tensor:
-    return modulate(x, shift, scale)
+    return x * (1.0 + scale) + shift
 
 
 class Rotary(torch.nn.Module):
-    def __init__(self, dim, base=10_000):
+    def __init__(self, seq_len, dim, base=10_000):
         super().__init__()
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2) / dim))
-        self.register_buffer("inv_freq", inv_freq)
-        self.seq_len_cached = None
-        self.cos_cached = None
-        self.sin_cached = None
 
-    def forward(self, x):
-        seq_len = x.shape[1]
-        if seq_len != self.seq_len_cached:
-            self.seq_len_cached = seq_len
-            t = torch.arange(x.shape[1], device=x.device)
-            freqs = torch.einsum("i,j->ij", t, self.inv_freq.clone())
-            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
-            # dims are: batch, seq_len, qkv, head, dim
-            self.cos_cached = emb.cos()[None, :, None, None, :].repeat(1, 1, 3, 1, 1)
-            self.sin_cached = emb.sin()[None, :, None, None, :].repeat(1, 1, 3, 1, 1)
-            # This makes the transformation on v an identity.
-            self.cos_cached[:, :, 2, :, :].fill_(1.0)
-            self.sin_cached[:, :, 2, :, :].fill_(0.0)
+        t = torch.arange(seq_len)
+        freqs = torch.einsum("i,j->ij", t, inv_freq)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        # dims are: batch, seq_len, qkv, head, dim
+        cos_cached = emb.cos()[None, :, None, None, :].repeat(1, 1, 3, 1, 1)
+        sin_cached = emb.sin()[None, :, None, None, :].repeat(1, 1, 3, 1, 1)
+        # This makes the transformation on v an identity.
+        cos_cached[:, :, 2, :, :].fill_(1.0)
+        sin_cached[:, :, 2, :, :].fill_(0.0)
+        self.register_buffer("cos_cached", cos_cached)
+        self.register_buffer("sin_cached", sin_cached)
 
+    def forward(self):
         return self.cos_cached, self.sin_cached
 
 
@@ -122,37 +60,10 @@ def apply_rotary_pos_emb(qkv, cos, sin):
     return flash_attn.layers.rotary.apply_rotary_emb_qkv_(qkv, cos, sin)
 
 
-def regular_attention_multi_headed(q, k, v):
-    # Assuming qkv is a tensor with shape [batch, seq_len, 3, num_heads, head_dim]
-    # where the 3 represents Q, K, V packed in that order
-    attention_output = F.scaled_dot_product_attention(
-        query=q.transpose(1, 2),
-        key=k.transpose(1, 2),
-        value=v.transpose(1, 2),
-        attn_mask=None,
-        dropout_p=0.0,
-        is_causal=False,
-    )
-    # [batch_size, seq_len, num_heads, head_dim]
-    attention_output = attention_output.transpose(1, 2)
-    return einops.rearrange(attention_output, "b s h d -> b s (h d)")
-
-
-#################################################################################
-#                                  Layers                                       #
-#################################################################################
-
-def residual_linear(x, W, x_skip, residual_scale):
-    """x_skip + residual_scale * W @ x"""
-    dim_out, dim_in = W.shape[0], W.shape[1]
-    return torch.addmm(
-        x_skip.view(-1, dim_out), x.view(-1, dim_in), W.T, alpha=residual_scale
-    ).view(*x.shape[:-1], dim_out)
-
-
 #################################################################################
 #               Embedding Layers for Timesteps and Class Labels                 #
 #################################################################################
+
 class TimestepEmbedder(nn.Module):
     """
     Embeds scalar timesteps into vector representations.
@@ -205,15 +116,17 @@ class LabelEmbedder(nn.Module):
 
 
 class DDiTBlock(nn.Module):
-    def __init__(self, dim, n_heads, adaLN, cond_dim=None, mlp_ratio=4, dropout=0.1):
+    def __init__(self, dim, n_heads, adaLN, seq_len, cond_dim=None, mlp_ratio=4, dropout=0.1):
         super().__init__()
         self.n_heads = n_heads
         self.adaLN = adaLN
+        self.dim = dim
+        self.dim_per_head = dim // n_heads
+        self.seq_len = seq_len
 
         self.norm1 = nn.LayerNorm(dim)
         self.attn_qkv = nn.Linear(dim, 3 * dim, bias=False)
         self.attn_out = nn.Linear(dim, dim, bias=False)
-        self.dropout1 = nn.Dropout(dropout)
 
         self.norm2 = nn.LayerNorm(dim)
         self.mlp = nn.Sequential(
@@ -221,62 +134,49 @@ class DDiTBlock(nn.Module):
             nn.GELU(approximate="tanh"),
             nn.Linear(mlp_ratio * dim, dim, bias=True),
         )
-        self.dropout2 = nn.Dropout(dropout)
-        self.dropout = dropout
+        self.dropout = nn.Dropout(p=dropout)
 
         if self.adaLN:
             self.adaLN_modulation = nn.Linear(cond_dim, 6 * dim)
             self.adaLN_modulation.weight.data.zero_()
             self.adaLN_modulation.bias.data.zero_()
 
-    def _get_bias_dropout_scale(self):
-        if self.training:
-            return bias_dropout_add_scale_fused_train
-        else:
-            return bias_dropout_add_scale_fused_inference
-
     def forward(self, x, rotary_cos_sin, c=None, jvp_attention=False):
-        bias_dropout_scale_fn = self._get_bias_dropout_scale()
-
         x_skip = x
         x = self.norm1(x)
 
         if self.adaLN:
-            # self.adaLN_modulation(c): (128, 1536)
-            # self.adaLN_modulation(c)[:, None]: (128, 1, 1536)
-            # "" .chunk(6, dim=2) returns 6 tuples of shapes (128, 1, 256)
             (shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp) = (
                 self.adaLN_modulation(c)[:, None].chunk(6, dim=2)
             )
             x = modulate_fused(x, shift_msa, scale_msa)
 
-        qkv = einops.rearrange(
-            self.attn_qkv(x),
-            "b s (three h d) -> b s three h d",
-            three=3,
-            h=self.n_heads,
-        )
+        qkv = self.attn_qkv(x).reshape(x.shape[0], self.seq_len, 3, self.n_heads, self.dim_per_head)
         q, k, v = split_and_apply_rotary_pos_emb(qkv, rotary_cos_sin)
 
         if jvp_attention:
             x = safe_sdpa_jvp(q.contiguous(), k.contiguous(), v.contiguous())
-            x = einops.rearrange(x, "b s h d -> b s (h d)")
         else:
-            x = regular_attention_multi_headed(q, k, v)
+            attention_output = F.scaled_dot_product_attention(
+                query=q.transpose(1, 2),
+                key=k.transpose(1, 2),
+                value=v.transpose(1, 2),
+                attn_mask=None,
+                dropout_p=0.0,
+                is_causal=False,
+            )
+            # [batch_size, seq_len, num_heads, head_dim]
+            x = attention_output.transpose(1, 2)
+
+        # B, S, (H D)
+        x = x.reshape(x.shape[0], self.seq_len, self.dim)
 
         if self.adaLN:
-            x = bias_dropout_scale_fn(
-                self.attn_out(x), None, gate_msa, x_skip, self.dropout
-            )
-            x = bias_dropout_scale_fn(self.mlp(modulate_fused(self.norm2(x), shift_mlp, scale_mlp)), None, gate_mlp, x, self.dropout)
+            x = self.dropout(self.attn_out(x) * gate_msa) + x_skip
+            x = self.dropout(self.mlp(modulate_fused(self.norm2(x), shift_mlp, scale_mlp)) * gate_mlp) + x
         else:
-            scale = torch.ones(1, device=x.device)  #, dtype=x.dtype)
-            x = bias_dropout_scale_fn(
-                self.attn_out(x), None, scale, x_skip, self.dropout
-            )
-            x = bias_dropout_scale_fn(
-                self.mlp(self.norm2(x)), None, scale, x, self.dropout
-            )
+            x = self.dropout(self.attn_out(x)) + x_skip
+            x = self.dropout(self.mlp(self.norm2(x))) + x
         return x
 
 
@@ -324,6 +224,7 @@ class DIT(nn.Module):
         n_blocks: int,
         n_heads: int,
         dropout: float,
+        length: int,
     ):
         super().__init__()
         self.adaLN = True
@@ -331,7 +232,7 @@ class DIT(nn.Module):
         self.vocab_embed = EmbeddingLayer(hidden_size, vocab_size)
         self.s_map = TimestepEmbedder(cond_dim)
         self.t_map = TimestepEmbedder(cond_dim)
-        self.rotary_emb = Rotary(hidden_size // n_heads)
+        self.rotary_emb = Rotary(length, hidden_size // n_heads)
 
         blocks = []
         for _ in range(n_blocks):
@@ -341,6 +242,7 @@ class DIT(nn.Module):
                 cond_dim=cond_dim,
                 adaLN=self.adaLN,
                 dropout=dropout,
+                seq_len=length,
             )
             blocks.append(block)
         self.blocks = nn.ModuleList(blocks)
@@ -352,12 +254,6 @@ class DIT(nn.Module):
             adaLN=self.adaLN,
         )
 
-    def _get_bias_dropout_scale(self):
-        if self.training:
-            return bias_dropout_add_scale_fused_train
-        else:
-            return bias_dropout_add_scale_fused_inference
-
     def forward(self, x, s, t, jvp_attention: bool = False):
         # time reparameterisation
         t = t - s
@@ -367,7 +263,7 @@ class DIT(nn.Module):
         t_cond = F.silu(self.t_map(t))
         cond = s_cond + t_cond
 
-        rotary_cos_sin = self.rotary_emb(x)
+        rotary_cos_sin = self.rotary_emb()
 
         for b in self.blocks:
             x = b(x, rotary_cos_sin, c=cond, jvp_attention=jvp_attention)

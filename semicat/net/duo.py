@@ -86,11 +86,11 @@ class Rotary(torch.nn.Module):
         self.cos_cached = None
         self.sin_cached = None
 
-    def forward(self, x, seq_dim=1):
-        seq_len = x.shape[seq_dim]
+    def forward(self, x):
+        seq_len = x.shape[1]
         if seq_len != self.seq_len_cached:
             self.seq_len_cached = seq_len
-            t = torch.arange(x.shape[seq_dim], device=x.device)#.type_as(self.inv_freq)
+            t = torch.arange(x.shape[1], device=x.device)
             freqs = torch.einsum("i,j->ij", t, self.inv_freq.clone())
             emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
             # dims are: batch, seq_len, qkv, head, dim
@@ -158,42 +158,25 @@ class TimestepEmbedder(nn.Module):
     Embeds scalar timesteps into vector representations.
     """
 
-    def __init__(self, hidden_size, frequency_embedding_size=256):
+    def __init__(self, hidden_size, frequency_embedding_size=256, max_period=10000):
         super().__init__()
         self.mlp = nn.Sequential(
             nn.Linear(frequency_embedding_size, hidden_size, bias=True),
             nn.SiLU(),
             nn.Linear(hidden_size, hidden_size, bias=True),
         )
-        self.frequency_embedding_size = frequency_embedding_size
-
-    @staticmethod
-    def timestep_embedding(t, dim, max_period=10000):
-        """
-        Create sinusoidal timestep embeddings.
-        :param t: a 1-D Tensor of N indices, one per batch element.
-                          These may be fractional.
-        :param dim: the dimension of the output.
-        :param max_period: controls the minimum frequency of the embeddings.
-        :return: an (N, D) Tensor of positional embeddings.
-        """
-        # https://github.com/openai/glide-text2im/blob/main/glide_text2im/nn.py
-        half = dim // 2
+        half = frequency_embedding_size // 2
         freqs = torch.exp(
             -math.log(max_period)
-            * torch.arange(start=0, end=half, device=t.device)
+            * torch.arange(start=0, end=half)
             / half
         )
-        args = t[:, None] * freqs[None]
-        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
-        if dim % 2:
-            embedding = torch.cat(
-                [embedding, torch.zeros_like(embedding[:, :1])], dim=-1
-            )
-        return embedding
+        self.register_buffer("freqs", freqs)
 
     def forward(self, t):
-        t_freq = self.timestep_embedding(t, self.frequency_embedding_size)
+        args = t[:, None] * self.freqs[None]
+        t_freq = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+        # t_freq = self.timestep_embedding(t, self.frequency_embedding_size)
         t_emb = self.mlp(t_freq)
         return t_emb
 
@@ -301,13 +284,12 @@ class EmbeddingLayer(nn.Module):
     def __init__(self, dim, vocab_dim):
         super().__init__()
         # self.layer_norm = nn.LayerNorm(vocab_dim)
-        self.seq = nn.Sequential(
-            nn.Linear(vocab_dim, dim),
-        )
+        self.seq = nn.Linear(vocab_dim, dim)
+        self._coeff = vocab_dim ** 0.5
 
     def forward(self, x):
         # x = self.layer_norm(x)
-        x = x / (x.shape[-1] ** 0.5)
+        x = x / self._coeff
         return self.seq(x)
 
 

@@ -180,7 +180,7 @@ class LM1BDataModule(LightningDataModule):
 
 
 if __name__ == "__main__":
-    lm = LM1BDataModule()
+    lm = LM1BDataModule(max_length=128, dataset="lm1b")
     lm.setup("fit")
     dl = lm.train_dataloader()
     it = iter(dl)

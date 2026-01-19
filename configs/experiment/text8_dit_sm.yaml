@@ -11,7 +11,6 @@ trainer:
   min_epochs: 100
   max_epochs: 500
   precision: bf16-mixed
-  accumulate_grad_batches: 4
 
 model:
   optimizer:
@@ -23,10 +22,10 @@ model:
 tags: ["semicat", "text8", "duo"]
 
 data:
-  batch_size: 256  # to fit on 20GB
+  batch_size: 128
 
 logger:
   wandb:
-    group: text8_duo_BB
+    group: text8_duo
     name: ${logger.wandb.group}-${seed}
     tags: ["semicat", "text8", "duo"]

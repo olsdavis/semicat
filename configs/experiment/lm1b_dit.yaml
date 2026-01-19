@@ -1,0 +1,37 @@
+# @package _global_
+
+defaults:
+  - override /data: text8
+  - override /model: text8_dit_lg
+  - override /trainer: default
+
+seed: 12345
+
+trainer:
+  min_epochs: 100
+  max_epochs: 500
+  precision: bf16-mixed
+
+model:
+  in_shape:
+    - 128
+    - 30000
+  net:
+    vocab_size: 30000
+    length: 128
+  optimizer:
+    _target_: torch.optim.AdamW
+    _partial_: true
+    lr: 1e-4
+    weight_decay: 0.0
+
+tags: ["semicat", "lm1b", "duo"]
+
+data:
+  batch_size: 128
+
+logger:
+  wandb:
+    group: lm1b_dit_lg
+    name: ${logger.wandb.group}-${seed}
+    tags: ["semicat", "lm1b", "duo"]

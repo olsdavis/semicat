@@ -173,7 +173,10 @@ class DDiTBlock(nn.Module):
 
         if self.adaLN:
             x = self.dropout(self.attn_out(x) * gate_msa) + x_skip
-            x = self.dropout(self.mlp(modulate_fused(self.norm2(x), shift_mlp, scale_mlp)) * gate_mlp) + x
+            # x = self.dropout(self.mlp(modulate_fused(self.norm2(x), shift_mlp, scale_mlp)) * gate_mlp) + x
+            x_skip = x
+            x = self.norm2(x) * (1.0 + scale_mlp) + shift_mlp
+            x = self.dropout(self.mlp(x) * gate_mlp) + x_skip
         else:
             x = self.dropout(self.attn_out(x)) + x_skip
             x = self.dropout(self.mlp(self.norm2(x))) + x

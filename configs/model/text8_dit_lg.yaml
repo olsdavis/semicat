@@ -6,8 +6,10 @@ in_shape:
   - 27
 
 net:
-  _target_: semicat.net.dit.DiT
+  _target_: semicat.net.duo.DIT
   hidden_size: 768
-  in_dim: 27
-  sequence_length: 256
-  depth: 10
+  n_heads: 12
+  cond_dim: 128
+  n_blocks: 12
+  dropout: 0.1
+  vocab_size: 27

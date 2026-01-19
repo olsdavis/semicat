@@ -10,7 +10,7 @@ seed: 12345
 trainer:
   min_epochs: 100
   max_epochs: 500
-  precision: bf16-true
+  precision: bf16-mixed
 
 model:
   optimizer:
@@ -19,7 +19,7 @@ model:
     lr: 1e-4
     weight_decay: 0.0
 
-tags: ["semicat", "text8", "dit"]
+tags: ["semicat", "text8", "duo"]
 
 data:
   batch_size: 128
@@ -28,4 +28,4 @@ logger:
   wandb:
     group: text8_dit_lg
     name: ${logger.wandb.group}-${seed}
-    tags: ["semicat", "text8", "dit"]
+    tags: ["semicat", "text8", "duo"]

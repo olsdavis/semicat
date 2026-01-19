@@ -93,7 +93,7 @@ class LM1BDataModule(LightningDataModule):
         assert self.tokenizer is not None, "need tokenizer"
 
         cache_dir = "/data-gauss/oscdav/.cache"
-        end_file = os.path.join(cache_dir, f"{self.hparams.dataset}_{split}_processed")
+        end_file = os.path.join(cache_dir, f"{self.hparams.dataset}_{self.hparams.max_length}_{split}_processed")
         if os.path.exists(end_file):
             print(f"Loading processed dataset from {end_file}")
             return datasets.load_from_disk(end_file).with_format("torch")

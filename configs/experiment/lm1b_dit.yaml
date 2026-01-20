@@ -8,8 +8,10 @@ defaults:
 seed: 12345
 
 trainer:
-  min_epochs: 100
-  max_epochs: 500
+  min_epochs: 0
+  min_steps: 250000
+  val_check_interval: 50000
+  check_val_every_n_epoch: null
   precision: bf16-mixed
 
 model:
@@ -24,14 +26,19 @@ model:
     _partial_: true
     lr: 1e-4
     weight_decay: 0.0
+  calc_nll: true
+  nll_samples: 1000
+  nll_model_batch_size: 256
+  nll_sampling_batch_size: 512
+  compile: true
 
 tags: ["semicat", "lm1b", "duo"]
 
 data:
-  batch_size: 128
+  batch_size: 400
 
 logger:
   wandb:
-    group: lm1b_dit_lg
+    group: lm1b_dit_lg_BB
     name: ${logger.wandb.group}-${seed}
     tags: ["semicat", "lm1b", "duo"]

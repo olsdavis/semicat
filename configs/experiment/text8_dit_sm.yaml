@@ -8,8 +8,10 @@ defaults:
 seed: 12345
 
 trainer:
-  min_epochs: 100
-  max_epochs: 500
+  min_epochs: 0
+  min_steps: 100000
+  val_check_interval: 50000
+  check_val_every_n_epoch: null
   precision: bf16-mixed
 
 model:

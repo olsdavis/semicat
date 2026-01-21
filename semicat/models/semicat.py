@@ -31,9 +31,11 @@ class SemicatModule(L.LightningModule):
         in_shape: tuple[int, ...],
         prior_type: Literal["gaussian", "discunif"],
         sd_prop: float = 0.25,
+        sd_type: Literal["lag", "ecld", "semi"] = "lag",
         compile: bool = False,
-        ecld: bool = False,
+        ecld: bool = False,  # unused, but left for retro-compatibility of checkpoints
     ):
+        assert not ecld, "deprecated, do not use"
         super().__init__()
         torch.set_float32_matmul_precision("high")
         self.save_hyperparameters(logger=False, ignore=["net"])
@@ -121,7 +123,7 @@ class SemicatModule(L.LightningModule):
         # xs = (1.0 - s) * x0 + s * x1
         xs = self._interpolate(x0, x1, s)
 
-        if self.hparams.ecld:
+        if self.hparams.sd_type == "ecld":
             must, dmu = torch.func.jvp(
                 lambda _t: self.net(xs, s.view(-1), _t, jvp_attention=True).softmax(dim=-1),
                 primals=(t.view(-1),),
@@ -142,7 +144,7 @@ class SemicatModule(L.LightningModule):
             energy = (gamma * dmu).pow(2).sum(dim=red_dims).mean()
             # TODO: 4.0 * div + 2.0 * energy??
             return div + energy
-        else:
+        elif self.hparams.sd_type == "lag":
             xst, dv = torch.func.jvp(
                 lambda _t: self.xst(xs, s.view(-1), _t, jvp_attention=True),
                 primals=(t.view(-1),),
@@ -155,6 +157,9 @@ class SemicatModule(L.LightningModule):
             return (
                 (1.0 - t) * dv - dv_target + xst
             ).pow(2).sum(dim=-1).mean()
+        elif self.hparams.sd_type == "semi":
+            raise NotImplementedError("not implemented yet")
+        raise ValueError(f"unknown sd_type: '{self.hparams.sd_type}'")
 
     def model_step(
         self,

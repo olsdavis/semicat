@@ -120,18 +120,37 @@ class SemicatModule(L.LightningModule):
 
         # xs = (1.0 - s) * x0 + s * x1
         xs = self._interpolate(x0, x1, s)
-        xst, dv = torch.func.jvp(
-            lambda _t: self.xst(xs, s.view(-1), _t, jvp_attention=True),
-            primals=(t.view(-1),),
-            tangents=(torch.ones_like(t).view(-1),),
-        )
-        xst = xst.detach()  # no grad
-        with torch.no_grad():
-            dv_target = self.net(xst, t.view(-1), t.view(-1)).softmax(dim=-1)
 
-        return (
-            (1.0 - t) * dv - dv_target + xst
-        ).pow(2).sum(dim=-1).mean()
+        if self.hparams.ecld:
+            must, dmu = torch.func.jvp(
+                lambda _t: self.net(xs, s.view(-1), _t, jvp_attention=True).softmax(dim=-1),
+                primals=(t.view(-1),),
+                tangents=(torch.ones_like(t).view(-1),),
+            )
+            with torch.no_grad():
+                dt = (t - s) / (1.0 - s + 1e-8)
+                diff = must - xs
+                xst = xs + view_for(dt, xs) * diff
+                mutt = F.log_softmax(self.net(xst, t.view(-1), t.view(-1)), dim=-1)
+
+            # calculate the ECLD loss, finally
+            gamma = (t - s) / (1.0 - s + 1e-8)
+            div = F.kl_div(must.log(), mutt, reduction="batchmean", log_target=True)
+            energy = (gamma * dmu).pow(2).sum(dim=tuple(range(1, len(xs.shape) + 1))).mean()
+            return 4.0 * div + 2.0 * energy
+        else:
+            xst, dv = torch.func.jvp(
+                lambda _t: self.xst(xs, s.view(-1), _t, jvp_attention=True),
+                primals=(t.view(-1),),
+                tangents=(torch.ones_like(t).view(-1),),
+            )
+            xst = xst.detach()  # no grad
+            with torch.no_grad():
+                dv_target = self.net(xst, t.view(-1), t.view(-1)).softmax(dim=-1)
+
+            return (
+                (1.0 - t) * dv - dv_target + xst
+            ).pow(2).sum(dim=-1).mean()
 
     def model_step(
         self,

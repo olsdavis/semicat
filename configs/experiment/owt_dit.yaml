@@ -29,7 +29,7 @@ model:
   calc_nll: false
   compile: true
 
-tags: ["semicat", "lm1b", "duo"]
+tags: ["semicat", "owt", "duo"]
 
 data:
   batch_size: 128
@@ -38,4 +38,4 @@ logger:
   wandb:
     group: owt_dit_lg_BB
     name: ${logger.wandb.group}-${seed}
-    tags: ["semicat", "lm1b", "duo"]
+    tags: ["semicat", "owt", "duo"]

@@ -20,7 +20,7 @@ model:
   net:
     length: ${data.k}
   compile: true
-  nll_eval: false
+  calc_nll: false
   nll_samples: 16
 
 tags: ["semicat", "text8", "duo"]

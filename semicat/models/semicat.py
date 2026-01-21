@@ -131,13 +131,16 @@ class SemicatModule(L.LightningModule):
                 dt = (t - s) / (1.0 - s + 1e-8)
                 diff = must - xs
                 xst = xs + view_for(dt, xs) * diff
-                mutt = F.log_softmax(self.net(xst, t.view(-1), t.view(-1)), dim=-1)
+                mutt = self.net(xst, t.view(-1), t.view(-1)).softmax(dim=-1)
 
+            # dimensions through which reduce
+            red_dims = tuple(range(1, len(xs.shape)))
             # calculate the ECLD loss, finally
             gamma = (t - s) / (1.0 - s + 1e-8)
-            div = F.kl_div(must.log(), mutt, reduction="batchmean", log_target=True)
-            energy = (gamma * dmu).pow(2).sum(dim=tuple(range(1, len(xs.shape) + 1))).mean()
-            return 4.0 * div + 2.0 * energy
+            # cross-entropy with mean reduction, not KL
+            div = -(mutt * must.log()).sum(dim=-1).mean()
+            energy = (gamma * dmu).pow(2).sum(dim=red_dims).mean()
+            return div + energy
         else:
             xst, dv = torch.func.jvp(
                 lambda _t: self.xst(xs, s.view(-1), _t, jvp_attention=True),

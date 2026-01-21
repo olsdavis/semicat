@@ -33,7 +33,7 @@ model:
 tags: ["semicat", "owt", "duo"]
 
 data:
-  batch_size: 48
+  batch_size: 32
 
 logger:
   wandb:

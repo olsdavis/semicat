@@ -140,6 +140,7 @@ class SemicatModule(L.LightningModule):
             # cross-entropy with mean reduction, not KL
             div = -(mutt * must.log()).sum(dim=-1).mean()
             energy = (gamma * dmu).pow(2).sum(dim=red_dims).mean()
+            # TODO: 4.0 * div + 2.0 * energy??
             return div + energy
         else:
             xst, dv = torch.func.jvp(

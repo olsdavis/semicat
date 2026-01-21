@@ -112,9 +112,6 @@ class TextSemicatModule(SemicatModule):
     def on_validation_epoch_end(self) -> None:
         super().on_validation_epoch_end()
 
-        if not self.calc_nll:
-            return
-
         for n_step in self.nll_steps:
             # A bit dirty, but might be helpful when working with limited memory
             torch.cuda.empty_cache()
@@ -138,15 +135,16 @@ class TextSemicatModule(SemicatModule):
             print("Detokenizing generated sequences")
             val_strings = self._tokens_to_strings(val_tokens)
 
-            print(f"Computing NLL for {n_step} steps...")
-            nll = self._compute_nll(val_strings)
-            self.log(
-                f"val/nll_{n_step}_steps",
-                nll,
-                prog_bar=True,
-                on_epoch=True,
-                logger=True,
-            )
+            if self.calc_nll:
+                print(f"Computing NLL for {n_step} steps...")
+                nll = self._compute_nll(val_strings)
+                self.log(
+                    f"val/nll_{n_step}_steps",
+                    nll,
+                    prog_bar=True,
+                    on_epoch=True,
+                    logger=True,
+                )
 
             self._log_strings(f"samples/{n_step:03d}", val_strings[:16])
 

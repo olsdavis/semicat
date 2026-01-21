@@ -8,8 +8,7 @@ defaults:
 seed: 12345
 
 trainer:
-  min_epochs: 100
-  max_epochs: 500
+  max_steps: 500000
   precision: bf16-mixed
 
 model:
@@ -20,11 +19,14 @@ model:
     weight_decay: 0.0
   net:
     length: ${data.k}
+  compile: true
+  nll_eval: false
+  nll_samples: 16
 
 tags: ["semicat", "text8", "duo"]
 
 data:
-  batch_size: 128
+  batch_size: 512
 
 logger:
   wandb:

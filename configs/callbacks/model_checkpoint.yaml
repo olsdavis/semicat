@@ -11,7 +11,8 @@ model_checkpoint:
   mode: "min" # "max" means higher metric value is better, can be also "min"
   auto_insert_metric_name: True # when True, the checkpoints filenames will contain the metric name
   save_weights_only: False # if True, then only the model’s weights will be saved
-  every_n_train_steps: null # number of training steps between checkpoints
   train_time_interval: null # checkpoints are monitored at the specified time interval
   every_n_epochs: null # number of epochs between checkpoints
   save_on_train_epoch_end: null # whether to run checkpointing at the end of the training epoch or the end of validation
+
+  every_n_train_steps: 25000

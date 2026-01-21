@@ -9,6 +9,8 @@ seed: 12345
 
 trainer:
   max_steps: 500000
+  val_check_interval: 10000
+  check_val_every_n_epoch: null
   precision: bf16-mixed
 
 model:
@@ -26,7 +28,7 @@ model:
 tags: ["semicat", "text8", "duo"]
 
 data:
-  batch_size: 512
+  batch_size: 400
 
 logger:
   wandb:

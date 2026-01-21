@@ -13,6 +13,7 @@ trainer:
   val_check_interval: 50000
   check_val_every_n_epoch: null
   precision: bf16-mixed
+  accumulate_grad_batches: 2
 
 model:
   in_shape:
@@ -32,7 +33,7 @@ model:
 tags: ["semicat", "owt", "duo"]
 
 data:
-  batch_size: 128
+  batch_size: 64
 
 logger:
   wandb:

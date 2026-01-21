@@ -25,12 +25,12 @@ class TextSemicatModule(SemicatModule):
 
     def __init__(
         self,
+        *args,
         calc_nll: bool = False,
         nll_steps: list[int] | None = None,
         nll_samples: int = 1000,
         nll_model_batch_size: int = 128,
         nll_sampling_batch_size: int = 256,
-        *args,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)

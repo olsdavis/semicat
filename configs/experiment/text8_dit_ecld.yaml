@@ -26,13 +26,13 @@ model:
   nll_samples: 16
   sd_type: ecld
 
-tags: ["semicat", "text8", "duo"]
+tags: ["semicat", "text8", "duo", "ecld"]
 
 data:
   batch_size: 400
 
 logger:
   wandb:
-    group: text8_dit_lg
+    group: text8_dit_ecld
     name: ${logger.wandb.group}-${seed}
-    tags: ["semicat", "text8", "duo"]
+    tags: ["semicat", "text8", "duo", "ecld"]

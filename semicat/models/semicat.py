@@ -338,3 +338,18 @@ class SemicatModule(L.LightningModule):
             # self.net.compile()
             # to avoid prefix
             self.net = torch.compile(self.net)
+
+    def on_load_checkpoint(self, checkpoint):
+        # For now, compiled models' weights end up being saved in
+        # net._orig_mod. For retro-compatibility of checkpoints,
+        # we fix the problem in the state dict
+        state_dict: dict = checkpoint["state_dict"]
+
+        prefix = "net._orig_mod."
+
+        # If the checkpoint is compatible, ignore
+        if not [k for k in state_dict.keys() if prefix in k]:
+            return
+
+        # Then, replace
+        checkpoint["state_dict"] = {k.replace(prefix, "net."): v for k, v in state_dict.items()}

@@ -68,9 +68,9 @@ class LM1BDataModule(LightningDataModule):
 
     def _load_tokenizer(self):
         if self.hparams.dataset == "lm1b":
-            self.tokenizer = transformers.BertTokenizer.from_pretrained("bert-base-uncased", trust_remote_code=True, local_files_only=True)
+            self.tokenizer = transformers.BertTokenizer.from_pretrained("bert-base-uncased", trust_remote_code=True)
         else:
-            self.tokenizer = transformers.AutoTokenizer.from_pretrained("gpt2", trust_remote_code=True, local_files_only=True)
+            self.tokenizer = transformers.AutoTokenizer.from_pretrained("gpt2", trust_remote_code=True)
 
         self.tokenizer.padding_side = "right"
         self.tokenizer.truncation_side = "right"

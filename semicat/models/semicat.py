@@ -32,6 +32,7 @@ class SemicatModule(L.LightningModule):
         prior_type: Literal["gaussian", "discunif"],
         sd_prop: float = 0.25,
         sd_type: Literal["lag", "ecld", "semi"] = "lag",
+        label_smoothing: float = 0.0,
         compile: bool = False,
         ecld: bool = False,  # unused, but left for retro-compatibility of checkpoints
     ):
@@ -102,7 +103,11 @@ class SemicatModule(L.LightningModule):
         # xt = (1.0 - t) * x0 + t * x1
         xt = self._interpolate(x0, x1, t)
         x1_pred: Tensor = self.net(xt, t.view(-1), t.view(-1))
-        return F.cross_entropy(x1_pred.transpose(-1, 1), x1)
+        return F.cross_entropy(
+            x1_pred.transpose(-1, 1),
+            x1,
+            label_smoothing=self.hparams.label_smoothing,
+        )
 
     def sd_model_step(
         self,

@@ -334,4 +334,7 @@ class SemicatModule(L.LightningModule):
 
     def on_fit_start(self) -> None:
         if self.hparams.compile:
+            # NOTE: Replace by
+            # self.net.compile()
+            # to avoid prefix
             self.net = torch.compile(self.net)

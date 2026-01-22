@@ -2,6 +2,7 @@
 LM1B/OpenWebText DataModule.
 """
 
+from dotenv import load_dotenv
 import itertools
 import os
 import re
@@ -11,6 +12,10 @@ import tokenizers
 import transformers
 import torch
 from torch.utils.data import DataLoader
+
+
+# from .env, data cache dir
+_DATASET_CACHE_DIR_KEY = "DATASET_CACHE_DIR"
 
 
 # Pre-compile regexes
@@ -57,6 +62,7 @@ class LM1BDataModule(LightningDataModule):
     ):
         assert dataset in ["lm1b", "owt"], f"unsupported dataset '{dataset}'"
         super().__init__()
+        load_dotenv()
         self.save_hyperparameters(logger=False)
         self.tokenizer = None
 
@@ -92,7 +98,9 @@ class LM1BDataModule(LightningDataModule):
     def _load_dataset(self, split: str):
         assert self.tokenizer is not None, "need tokenizer"
 
-        cache_dir = "/data-gauss/oscdav/.cache"
+        cache_dir = os.getenv(_DATASET_CACHE_DIR_KEY)
+        assert cache_dir is not None, "must specify a cache dir for the data"
+
         end_file = os.path.join(cache_dir, f"{self.hparams.dataset}_{self.hparams.max_length}_{split}_processed")
         if os.path.exists(end_file):
             print(f"Loading processed dataset from {end_file}")

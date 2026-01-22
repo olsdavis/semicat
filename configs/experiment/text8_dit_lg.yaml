@@ -18,7 +18,7 @@ model:
     _target_: torch.optim.AdamW
     _partial_: true
     lr: 1e-4
-    weight_decay: 0.0
+    weight_decay: 0.1
   net:
     length: ${data.k}
   compile: true
@@ -32,6 +32,6 @@ data:
 
 logger:
   wandb:
-    group: text8_dit_lg
+    group: text8_dit_lg_wd
     name: ${logger.wandb.group}-${seed}
     tags: ["semicat", "text8", "duo"]

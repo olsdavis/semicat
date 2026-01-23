@@ -17,7 +17,7 @@ class TextSemicatModule(SemicatModule):
 
     :param calc_nll: Whether to calculate NLL at the end of validation epochs.
     :param nll_steps: For many how steps the model should be evaluated. If `None`,
-        `[1, 2, 4, 8, 16, 32, 64, 100]` by default.
+        `[1, 2, 4, 8, 16]` by default.
     :param nll_samples: The number of samples to draw per step to evaluate the NLL.
     :param nll_model_batch_size: The batch size to use for the underlying NLL model.
     :param nll_sampling_batch_size: The batch size to use for the model's sampling.
@@ -35,7 +35,7 @@ class TextSemicatModule(SemicatModule):
     ):
         super().__init__(*args, **kwargs)
         self.calc_nll = calc_nll
-        self.nll_steps = nll_steps or [1, 2, 4, 8, 16, 32, 64, 100]
+        self.nll_steps = nll_steps or [1, 2, 4, 8, 16]
 
     @torch.inference_mode()
     def sample_batch(

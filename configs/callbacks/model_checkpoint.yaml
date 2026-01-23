@@ -15,4 +15,4 @@ model_checkpoint:
   every_n_epochs: null # number of epochs between checkpoints
   save_on_train_epoch_end: null # whether to run checkpointing at the end of the training epoch or the end of validation
 
-  every_n_train_steps: 25000
+  every_n_train_steps: 10000

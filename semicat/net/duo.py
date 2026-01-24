@@ -349,7 +349,7 @@ class DIT(nn.Module):
         s_cond = F.silu(self.s_map(s))
         t_cond = F.silu(self.t_map(t))
         cond = s_cond + t_cond
-        x = self.vocab_embed(x, t, cond)
+        x = self.vocab_embed(x, s, cond)
 
         rotary_cos_sin = self.rotary_emb()
 

@@ -21,6 +21,7 @@ model:
     weight_decay: 0.0
   net:
     length: ${data.k}
+    embed_type: rms
   compile: true
   calc_nll: false
   nll_samples: 16

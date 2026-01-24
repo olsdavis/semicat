@@ -3,6 +3,7 @@ Changed architecture from Duo to be able to edit.
 """
 
 import math
+from typing import Literal
 
 # import einops
 import flash_attn
@@ -92,24 +93,6 @@ class TimestepEmbedder(nn.Module):
         return t_emb
 
 
-class LabelEmbedder(nn.Module):
-    """Embeds class labels into vector representations.
-
-    Also handles label dropout for classifier-free guidance.
-    """
-
-    def __init__(self, num_classes, cond_size):
-        super().__init__()
-        self.embedding_table = nn.Embedding(num_classes + 1, cond_size)
-        self.num_classes = num_classes
-
-        # TODO think of initializing with 0.02 std deviation like in original DiT paper
-
-    def forward(self, labels):
-        embeddings = self.embedding_table(labels)
-        return embeddings
-
-
 #################################################################################
 #                                 Core Model                                    #
 #################################################################################
@@ -190,7 +173,8 @@ class EmbeddingLayer(nn.Module):
         self.seq = nn.Linear(vocab_dim, dim)
         self._coeff = vocab_dim ** 0.5
 
-    def forward(self, x):
+    def forward(self, x, t, c):
+        # t and c are ignored but are not in the other version
         # x = self.layer_norm(x)
         x = x / self._coeff
         return self.seq(x)
@@ -218,6 +202,100 @@ class DDiTFinalLayer(nn.Module):
         return x
 
 
+class RMSEmbeddingLayer(nn.Module):
+    """
+    Replacement input embedding for noisy continuous/discrete mixture inputs xt.
+    - RMS-based time scaling
+    - shallow MLP with small residual
+    - FiLM conditioning on `cond` (expected shape (B, d_model))
+    - LayerNorm on output hidden dim
+    NOTE: x expected shape (B, L, vocab_dim). t is in [0,1] and may be scalar, (B,) or (B,1).
+    """
+
+    def __init__(
+        self,
+        vocab_dim: int,
+        d_model: int,
+        cond_dim: int,
+        hidden_dim: int = None,
+        sigma0: float = 1.0,
+        eps: float = 1e-6,
+        residual_scale: float = 0.1,
+    ):
+        super().__init__()
+        hidden_dim = hidden_dim or (d_model * 2)
+        self.vocab_dim = vocab_dim
+        self.d_model = d_model
+        self.sigma0 = float(sigma0)
+        self.eps = float(eps)
+        self.residual_scale = float(residual_scale)
+
+        # projection from vocab-space -> model dim
+        self.proj = nn.Linear(vocab_dim, d_model, bias=True)
+
+        # small MLP in hidden space
+        self.mlp = nn.Sequential(
+            nn.Linear(d_model, hidden_dim),
+            nn.GELU(approximate="tanh"),
+            nn.Linear(hidden_dim, d_model),
+        )
+
+        # FiLM (time/scale conditioning) if cond_dim provided
+        self.cond_dim = cond_dim
+        self.film_gamma = nn.Linear(cond_dim, d_model, bias=True)
+        self.film_beta  = nn.Linear(cond_dim, d_model, bias=True)
+
+        self.final_norm = nn.RMSNorm(d_model, eps=1e-8)
+
+        # init recommended for stability
+        nn.init.xavier_uniform_(self.proj.weight)
+        if self.proj.bias is not None:
+            nn.init.zeros_(self.proj.bias)
+        for m in self.mlp:
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+        nn.init.zeros_(self.film_gamma.weight)
+        nn.init.zeros_(self.film_gamma.bias)
+        nn.init.zeros_(self.film_beta.weight)
+        nn.init.zeros_(self.film_beta.bias)
+
+    def forward(self, x: torch.Tensor, t: torch.Tensor, cond: torch.Tensor = None):
+        """
+        x: (B, L, V)
+        t: (B,)
+        returns: (B, L, d_model)
+        """
+        B, L, V = x.shape
+
+        # expected squared-norm of x_t per sample:
+        # E||x_t||^2 = t^2 * ||one-hot||^2 + (1-t)^2 * D * sigma0^2
+        # for one-hot ||one-hot||^2 == 1
+        exp_norm2 = t**2 + (1.0 - t)**2 * (self.vocab_dim * (self.sigma0**2))
+        scale = 1.0 / torch.sqrt(exp_norm2 + self.eps)          # (B,)
+
+        # broadcast scale to (B, L, V)
+        scale = scale.view(B, 1, 1)
+        x_scaled = x * scale
+
+        # linear projection
+        h = self.proj(x_scaled)          # (B, L, d_model)
+
+        # small residual MLP to add nonlinearity / capacity
+        h = h + self.residual_scale * self.mlp(h)
+
+        # FiLM conditional modulation
+        # cond expected (B, cond_dim) -> expand to (B,1,d_model)
+        gamma = self.film_gamma(cond).unsqueeze(1)  # (B,1,d_model)
+        beta  = self.film_beta(cond).unsqueeze(1)
+        h = (1.0 + gamma) * h + beta
+
+        # final normalization
+        h = self.final_norm(h)
+        return h
+
+
 class DIT(nn.Module):
     def __init__(
         self,
@@ -228,11 +306,18 @@ class DIT(nn.Module):
         n_heads: int,
         dropout: float,
         length: int,
+        embed_type: Literal["naive", "rms"] = "naive",
     ):
         super().__init__()
         self.adaLN = True
         self.vocab_size = vocab_size
-        self.vocab_embed = EmbeddingLayer(hidden_size, vocab_size)
+        if embed_type == "naive":
+            self.vocab_embed = EmbeddingLayer(hidden_size, vocab_size)
+        elif embed_type == "rms":
+            self.vocab_embed = RMSEmbeddingLayer(vocab_size, hidden_size, cond_dim)
+        else:
+            raise ValueError(f"illegal 'embed_type': {embed_type}")
+
         self.s_map = TimestepEmbedder(cond_dim)
         self.t_map = TimestepEmbedder(cond_dim)
         self.rotary_emb = Rotary(length, hidden_size // n_heads)
@@ -261,10 +346,10 @@ class DIT(nn.Module):
         # time reparameterisation
         t = t - s
 
-        x = self.vocab_embed(x)
         s_cond = F.silu(self.s_map(s))
         t_cond = F.silu(self.t_map(t))
         cond = s_cond + t_cond
+        x = self.vocab_embed(x, t, cond)
 
         rotary_cos_sin = self.rotary_emb()
 

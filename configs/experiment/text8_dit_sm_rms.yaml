@@ -1,0 +1,39 @@
+# @package _global_
+
+defaults:
+  - override /data: text8
+  - override /model: text8_duo
+  - override /trainer: default
+
+seed: 12345
+
+trainer:
+  min_epochs: 0
+  min_steps: 100000
+  val_check_interval: 50000
+  check_val_every_n_epoch: null
+  precision: bf16-mixed
+
+model:
+  optimizer:
+    _target_: torch.optim.AdamW
+    _partial_: true
+    lr: 1e-4
+    weight_decay: 0.0
+  net:
+    length: ${data.k}
+    embed_type: rms
+  compile: true
+  calc_nll: false
+  nll_samples: 16
+
+tags: ["semicat", "text8", "duo", "rms"]
+
+data:
+  batch_size: 128
+
+logger:
+  wandb:
+    group: text8_duo_sm_rms
+    name: ${logger.wandb.group}-${seed}
+    tags: ["semicat", "text8", "duo"]

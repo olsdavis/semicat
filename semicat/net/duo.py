@@ -85,6 +85,12 @@ class TimestepEmbedder(nn.Module):
         )
         self.register_buffer("freqs", freqs)
 
+        # init:
+        nn.init.zeros_(self.mlp[-1].weight)
+        nn.init.zeros_(self.mlp[-1].bias)
+        nn.init.zeros_(self.mlp[0].bias)
+        nn.init.xavier_uniform_(self.mlp[0].weight)
+
     def forward(self, t):
         args = t[:, None] * self.freqs[None]
         t_freq = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
@@ -118,6 +124,14 @@ class DDiTBlock(nn.Module):
             nn.Linear(mlp_ratio * dim, dim, bias=True),
         )
         self.dropout = nn.Dropout(p=dropout)
+
+        # init:
+        nn.init.xavier_uniform_(self.attn_qkv.weight)
+        nn.init.xavier_uniform_(self.mlp[0].weight)
+        nn.init.zeros_(self.mlp[0].bias)
+        nn.init.zeros_(self.mlp[-1].weight)
+        nn.init.zeros_(self.mlp[-1].bias)
+        nn.init.zeros_(self.attn_out.weight)
 
         if self.adaLN:
             self.adaLN_modulation = nn.Linear(cond_dim, 6 * dim)
@@ -247,15 +261,15 @@ class RMSEmbeddingLayer(nn.Module):
 
         self.final_norm = nn.RMSNorm(d_model, eps=1e-8)
 
-        # init recommended for stability
+        # init
         nn.init.xavier_uniform_(self.proj.weight)
-        if self.proj.bias is not None:
-            nn.init.zeros_(self.proj.bias)
-        for m in self.mlp:
-            if isinstance(m, nn.Linear):
-                nn.init.xavier_uniform_(m.weight)
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
+        nn.init.zeros_(self.proj.bias)
+        # xavier
+        nn.init.xavier_uniform_(self.mlp[0].weight)
+        nn.init.zeros_(self.mlp[0].bias)
+        nn.init.zeros_(self.mlp[-1].weight)
+        nn.init.zeros_(self.mlp[-1].bias)
+        # film
         nn.init.zeros_(self.film_gamma.weight)
         nn.init.zeros_(self.film_gamma.bias)
         nn.init.zeros_(self.film_beta.weight)
@@ -307,6 +321,7 @@ class DIT(nn.Module):
         dropout: float,
         length: int,
         embed_type: Literal["naive", "rms"] = "naive",
+        zero_init: bool = False,
     ):
         super().__init__()
         self.adaLN = True

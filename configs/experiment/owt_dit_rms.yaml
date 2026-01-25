@@ -10,7 +10,7 @@ seed: 12345
 trainer:
   min_epochs: 0
   min_steps: 250000
-  val_check_interval: 50000
+  val_check_interval: 25000
   check_val_every_n_epoch: null
   precision: bf16-mixed
   accumulate_grad_batches: 2

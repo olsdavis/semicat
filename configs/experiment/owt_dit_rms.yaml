@@ -27,7 +27,7 @@ model:
     _target_: torch.optim.AdamW
     _partial_: true
     lr: 1e-4
-    weight_decay: 0.1
+    weight_decay: 1e-5
   calc_nll: true
   nll_samples: 16
   compile: true

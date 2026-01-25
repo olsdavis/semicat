@@ -12,31 +12,35 @@ trainer:
   val_check_interval: 10000
   check_val_every_n_epoch: null
   precision: bf16-mixed
-  # accumulate_grad_batches: 8
-  # gradient_clip_val: 1.0
+  accumulate_grad_batches: 8
+  gradient_clip_val: 1.0
 
 model:
   optimizer:
     _target_: torch.optim.AdamW
     _partial_: true
     lr: 1e-4
-    weight_decay: 1e-5
+    weight_decay: 0.1
   net:
     length: ${data.k}
     dropout: 0.10
     embed_type: rms
+  scheduler:
+    _target_: torch.optim.lr_scheduler.LinearLR
+    _partial_: true
+    start_factor: 1e-3
+    total_iters: 500
   compile: true
   calc_nll: false
   nll_samples: 16
-  # label_smoothing: 0.05
 
 tags: ["semicat", "text8", "duo"]
 
 data:
-  batch_size: 400
+  batch_size: 256
 
 logger:
   wandb:
-    group: text8_dit_lg
+    group: text8_dit_lg_bb
     name: ${logger.wandb.group}-${seed}
     tags: ["semicat", "text8", "duo"]

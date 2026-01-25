@@ -12,15 +12,23 @@ trainer:
   val_check_interval: 10000
   check_val_every_n_epoch: null
   precision: bf16-mixed
+  accumulate_grad_batches: 8
+  gradient_clip_val: 1.0
 
 model:
   optimizer:
     _target_: torch.optim.AdamW
     _partial_: true
     lr: 1e-4
-    weight_decay: 0.0
+    weight_decay: 0.1
+  scheduler:
+    _target_: torch.optim.lr_scheduler.LinearLR
+    _partial_: true
+    start_factor: 1e-3
+    total_iters: 500
   net:
     length: ${data.k}
+    dropout: 0.1
     embed_type: rms
   compile: true
   calc_nll: false
@@ -30,10 +38,10 @@ model:
 tags: ["semicat", "text8", "duo", "ecld"]
 
 data:
-  batch_size: 400
+  batch_size: 256
 
 logger:
   wandb:
-    group: text8_dit_ecld
+    group: text8_dit_ecld_bb
     name: ${logger.wandb.group}-${seed}
     tags: ["semicat", "text8", "duo", "ecld"]

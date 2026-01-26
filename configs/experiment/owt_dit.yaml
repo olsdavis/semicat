@@ -13,7 +13,8 @@ trainer:
   val_check_interval: 25000
   check_val_every_n_epoch: null
   precision: bf16-mixed
-  accumulate_grad_batches: 2
+  accumulate_grad_batches: 8
+  gradient_clip_val: 1.0
 
 model:
   in_shape:
@@ -26,7 +27,12 @@ model:
     _target_: torch.optim.AdamW
     _partial_: true
     lr: 1e-4
-    weight_decay: 0.0
+    weight_decay: 0.1
+  scheduler:
+    _target_: torch.optim.lr_scheduler.LinearLR
+    _partial_: true
+    start_factor: 1e-3
+    total_iters: 500
   calc_nll: true
   nll_samples: 16
   compile: true
@@ -38,6 +44,6 @@ data:
 
 logger:
   wandb:
-    group: owt_dit_lg_BB
+    group: owt_dit_lg_truebb
     name: ${logger.wandb.group}-${seed}
     tags: ["semicat", "owt", "duo"]

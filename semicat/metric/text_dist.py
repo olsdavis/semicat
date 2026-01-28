@@ -16,7 +16,7 @@ class TextMetrics:
     """
 
     @classmethod
-    def _load_tokenizer(self, tokenizer_model: str = "gpt2"):
+    def _load_tokenizer(self, tokenizer_model: str = "gpt2-large"):
         tokenizer = transformers.AutoTokenizer.from_pretrained(tokenizer_model)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
@@ -85,8 +85,8 @@ class TextMetrics:
                     dim=-1,
                 )
                 for (sample_chunk, attn_mask_chunk) in zip(_samples, _attn_mask):
-                    logits = model(sample_chunk, attention_mask=attn_mask_chunk)
-                    logits = logits[0].transpose(-1, -2)
+                    logits = model(sample_chunk, attention_mask=attn_mask_chunk).logits
+                    logits = logits.transpose(-1, -2)
                     nlls = F.cross_entropy(
                         logits[..., :-1],
                         sample_chunk[..., 1:],

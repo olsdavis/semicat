@@ -201,7 +201,7 @@ if __name__ == "__main__":
         mean_ppl = TextMetrics.compute_mean_gen_ppl(
             lm.tensor_to_strings(example["input_ids"]),
             batch_size=100,
-            context_size=128,
+            context_size=1024,
             device="cuda:3",
         )
         print(mean_ppl)

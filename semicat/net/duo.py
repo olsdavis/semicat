@@ -217,7 +217,7 @@ class RMSEmbeddingLayer(nn.Module):
         vocab_dim: int,
         d_model: int,
         cond_dim: int,
-        hidden_dim: int = None,
+        hidden_dim: int | None = None,
         sigma0: float = 1.0,
         eps: float = 1e-6,
         residual_scale: float = 0.1,
@@ -261,7 +261,7 @@ class RMSEmbeddingLayer(nn.Module):
         nn.init.zeros_(self.film_beta.weight)
         nn.init.zeros_(self.film_beta.bias)
 
-    def forward(self, x: torch.Tensor, t: torch.Tensor, cond: torch.Tensor = None):
+    def forward(self, x: torch.Tensor, t: torch.Tensor, cond: torch.Tensor | None = None):
         """
         x: (B, L, V)
         t: (B,)

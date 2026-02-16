@@ -39,11 +39,10 @@ For wandb logging, add `logger=wandb` as an argument.
 ## :bar_chart: Data
 
 ### Text8
-To download the dataset, follow the steps in [https://github.com/andrew-cr/discrete_flow_models], placing the data in `./data/text8`.
+To download the dataset, follow the steps in [github.com/andrew-cr/discrete_flow_models](https://github.com/andrew-cr/discrete_flow_models), placing the data in `./data/text8`.
 
 ### LM1B
-LM1B is automatically downloaded into `DATASET_CACHE_DIR`, and then sequence-packed. You can also run `python -m semicat.data.lm1b` separately in order to set up the data before launching your runs.
-
+LM1B is automatically downloaded into `DATASET_CACHE_DIR`, and then sequence-packed, etc. You can also run `python -m semicat.data.lm1b` separately in order to set up the data before launching your runs.
 
 ## :blue_book: Citation
 To cite the paper or the code, please use the following:

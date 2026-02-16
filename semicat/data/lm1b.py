@@ -188,25 +188,10 @@ class LM1BDataModule(LightningDataModule):
 
 
 if __name__ == "__main__":
-    from semicat.metric.text_dist import TextMetrics
-
     lm = LM1BDataModule(max_length=128, dataset="lm1b", batch_size=1024)
     lm.setup("fit")
     dl = lm.train_dataloader()
     it = iter(dl)
-    samples = []
-    for i in range(100):
-        import ipdb; ipdb.set_trace()
+    for i in range(5):
         example = next(it)
-        mean_ppl = TextMetrics.compute_mean_gen_ppl(
-            lm.tensor_to_strings(example["input_ids"]),
-            batch_size=100,
-            context_size=1024,
-            device="cuda:3",
-        )
-        print(mean_ppl)
         print(example["input_ids"].shape, example["input_ids"].max())
-        samples += [example]
-        if i >= 39:
-            pass
-            #import ipdb; ipdb.set_trace()

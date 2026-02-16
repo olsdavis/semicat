@@ -1,4 +1,12 @@
-"""Enables NLL-based eval using a pre-trained GPT model."""
+"""
+Enables NLL-based eval using a pre-trained GPT model.
+
+NOTE: This class is for text-8, as it is based on Discrete Flow Models,
+by Campbell, et al. for comparison.
+
+NOTE: The evaluation is done in a different file with the actual GPT-J-6B
+model.
+"""
 
 import os
 

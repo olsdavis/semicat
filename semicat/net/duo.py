@@ -209,7 +209,7 @@ class RMSEmbeddingLayer(nn.Module):
     - shallow MLP with small residual
     - FiLM conditioning on `cond` (expected shape (B, d_model))
     - LayerNorm on output hidden dim
-    NOTE: x expected shape (B, L, vocab_dim). t is in [0,1] and may be scalar, (B,) or (B,1).
+    NOTE: x expected shape (B, L, vocab_dim).
     """
 
     def __init__(

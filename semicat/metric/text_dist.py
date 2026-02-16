@@ -1,5 +1,7 @@
 """
 Metrics on text distribution.
+
+Based on Duo by Sahoo, et al. evaluation pipeline.
 """
 
 import os
@@ -16,7 +18,7 @@ class TextMetrics:
     """
 
     @classmethod
-    def _load_tokenizer(self, tokenizer_model: str = "gpt2-large"):
+    def _load_tokenizer(cls, tokenizer_model: str = "gpt2-large"):
         tokenizer = transformers.AutoTokenizer.from_pretrained(tokenizer_model)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token

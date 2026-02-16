@@ -11,7 +11,7 @@ trainer:
   max_steps: 500000
   val_check_interval: 10000
   check_val_every_n_epoch: null
-  precision: bf16-true
+  precision: bf16-mixed
   accumulate_grad_batches: 8
   gradient_clip_val: 1.0
 
@@ -30,14 +30,14 @@ model:
     _partial_: true
     start_factor: 1e-3
     total_iters: 500
-  compile: false
+  compile: true
   calc_nll: false
   nll_samples: 16
 
 tags: ["semicat", "text8", "duo"]
 
 data:
-  batch_size: 128
+  batch_size: 256
 
 logger:
   wandb:

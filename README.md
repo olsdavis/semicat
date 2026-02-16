@@ -25,7 +25,7 @@ mamba env create -f environment.yaml
 mamba activate semicat
 ```
 
-3. Create a `.env` file containing the directory that should contain the cache directory for LM1B:
+3. Create a `.env` file containing the directory that will cache the processed LM1B data:
 ```
 DATASET_CACHE_DIR=/the/dir/for/lm1b
 ```

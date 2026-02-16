@@ -1,4 +1,4 @@
-<center>
+<div align="center">
 
 # [Categorical Flow Maps](https://arxiv.org/abs/2602.12233)
 
@@ -9,7 +9,7 @@ Official implementation of the text experiments. :rocket:
 [![arXiv](https://img.shields.io/badge/arXiv-2602.12233-red.svg)](https://arxiv.org/abs/2602.12233) ![Lightning](https://img.shields.io/badge/-Lightning-792ee5?logo=pytorchlightning&logoColor=white)
 
 <img src="res/overview.png" width="80%">
-</center>
+</div>
 
 ## :question: About
 This repository contains all the code for the text experiments from the Categorical Flow Maps paper. The main module of the code is located in [`semicat/models/semicat.py`](semicat/models/semicat.py) :brain:. The module is general and ready to accept many other data types. Text-specific code is to be found in [`semicat/models/textsemicat.py`](semicat/models/textsemicat.py) :pencil:.

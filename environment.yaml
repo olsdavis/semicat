@@ -12,6 +12,7 @@ dependencies:
     - torch==2.7.1
     - torchvision==0.22.1
     - torchmetrics==1.8.2
+    - torchdiffeq
     - lightning==2.6.0
     - hydra-core
     - hydra-optuna-sweeper
